@@ -1,0 +1,36 @@
+{
+  "jobs": [
+    {
+      "id": "job-abc123",
+      "title": "Software Engineer, Backend",
+      "isListed": true,
+      "publishedDate": "2025-02-01T00:00:00Z",
+      "department": { "name": "Engineering" },
+      "team": { "name": "Platform" },
+      "location": { "name": "Toronto, ON, Canada" },
+      "employmentType": "FullTime",
+      "jobPostingUrls": {
+        "careerPage": { "url": "https://jobs.ashbyhq.com/testco/job-abc123" }
+      },
+      "descriptionHtml": "<p>We are looking for a backend engineer with TypeScript experience.</p>",
+      "descriptionPlain": "We are looking for a backend engineer with TypeScript experience.",
+      "customFields": []
+    },
+    {
+      "id": "job-def456",
+      "title": "Product Design Intern",
+      "isListed": true,
+      "publishedDate": "2025-01-28T00:00:00Z",
+      "department": { "name": "Design" },
+      "team": { "name": "Product" },
+      "location": { "name": "Vancouver, BC, Canada" },
+      "employmentType": "Internship",
+      "jobPostingUrls": {
+        "careerPage": { "url": "https://jobs.ashbyhq.com/testco/job-def456" }
+      },
+      "descriptionHtml": "<p>Summer internship for product designers.</p>",
+      "descriptionPlain": "Summer internship for product designers.",
+      "customFields": []
+    }
+  ]
+}

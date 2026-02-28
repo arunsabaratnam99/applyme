@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* White Mocha — warm off-white keyboard palette */
+    --background: 30 25% 95%;
+    --foreground: 20 30% 14%;
+
+    --card: 30 20% 92%;
+    --card-foreground: 20 30% 14%;
+
+    --popover: 30 25% 97%;
+    --popover-foreground: 20 30% 14%;
+
+    --primary: 20 25% 46%;
+    --primary-foreground: 30 25% 97%;
+
+    --secondary: 30 18% 88%;
+    --secondary-foreground: 20 25% 22%;
+
+    --muted: 30 16% 88%;
+    --muted-foreground: 20 15% 52%;
+
+    --accent: 30 20% 85%;
+    --accent-foreground: 20 28% 18%;
+
+    --destructive: 0 70% 54%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 55% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 85% 48%;
+    --warning-foreground: 20 30% 14%;
+
+    --border: 25 18% 82%;
+    --input: 25 18% 82%;
+    --ring: 20 25% 46%;
+
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    /* Dark Mocha — deep warm charcoal palette */
+    --background: 20 18% 11%;
+    --foreground: 30 18% 90%;
+
+    --card: 20 16% 15%;
+    --card-foreground: 30 18% 90%;
+
+    --popover: 20 18% 13%;
+    --popover-foreground: 30 18% 90%;
+
+    --primary: 22 30% 68%;
+    --primary-foreground: 20 18% 11%;
+
+    --secondary: 20 14% 20%;
+    --secondary-foreground: 30 16% 80%;
+
+    --muted: 20 14% 20%;
+    --muted-foreground: 25 12% 55%;
+
+    --accent: 20 14% 23%;
+    --accent-foreground: 30 16% 86%;
+
+    --destructive: 0 62% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 50% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 75% 48%;
+    --warning-foreground: 20 18% 11%;
+
+    --border: 20 14% 24%;
+    --input: 20 14% 24%;
+    --ring: 22 30% 68%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3, h4 {
+    @apply tracking-tight;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.2);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+}

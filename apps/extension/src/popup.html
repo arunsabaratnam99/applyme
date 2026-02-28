@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ApplyMe</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 320px;
+      min-height: 200px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .logo { font-weight: 700; font-size: 15px; color: #fff; }
+    .logo span { color: #3b82f6; }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e;
+    }
+    .status-dot.offline { background: #ef4444; }
+    .section { padding: 10px 14px; }
+    .label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+    .queue-item {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 9px 11px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .queue-item-avatar {
+      width: 30px; height: 30px; border-radius: 6px;
+      background: #334155;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #94a3b8; flex-shrink: 0;
+    }
+    .queue-item-body { flex: 1; min-width: 0; }
+    .queue-item-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .queue-item-sub { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .open-btn {
+      background: #3b82f6; color: #fff; border: none; border-radius: 5px;
+      padding: 4px 9px; font-size: 11px; font-weight: 600; cursor: pointer;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .open-btn:hover { background: #2563eb; }
+    .empty {
+      text-align: center; color: #475569; padding: 24px 14px; font-size: 12px;
+    }
+    .footer {
+      padding: 8px 14px 12px;
+      display: flex; gap: 6px;
+    }
+    .footer-btn {
+      flex: 1; background: #1e293b; color: #94a3b8; border: none;
+      border-radius: 7px; padding: 7px; font-size: 11px; font-weight: 500;
+      cursor: pointer; text-align: center;
+    }
+    .footer-btn:hover { background: #334155; color: #e2e8f0; }
+    #auth-section { padding: 16px 14px; }
+    .auth-input {
+      width: 100%; background: #1e293b; border: 1px solid #334155;
+      border-radius: 7px; color: #e2e8f0; font-size: 12px; padding: 8px 10px;
+      margin-bottom: 8px; outline: none;
+    }
+    .auth-input:focus { border-color: #3b82f6; }
+    .auth-btn {
+      width: 100%; background: #3b82f6; color: #fff; border: none;
+      border-radius: 7px; padding: 8px; font-weight: 600; font-size: 13px;
+      cursor: pointer;
+    }
+    .auth-btn:hover { background: #2563eb; }
+    .auth-hint { font-size: 11px; color: #475569; margin-top: 6px; }
+    a { color: #3b82f6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="logo">Apply<span>Me</span></span>
+    <div id="status-dot" class="status-dot offline"></div>
+  </div>
+
+  <div id="auth-section" style="display:none;">
+    <div class="label">Connect your account</div>
+    <input id="token-input" class="auth-input" type="password" placeholder="Paste your API token" />
+    <button id="save-token-btn" class="auth-btn">Connect</button>
+    <p class="auth-hint">
+      Find your token at <a href="https://applyme.ca/settings" target="_blank">applyme.ca/settings</a>
+    </p>
+  </div>
+
+  <div id="main-section" style="display:none;">
+    <div class="section">
+      <div class="label">Autofill queue</div>
+      <div id="queue-list"></div>
+    </div>
+    <div class="footer">
+      <button class="footer-btn" id="refresh-btn">↻ Refresh</button>
+      <button class="footer-btn" id="dashboard-btn">Dashboard ↗</button>
+      <button class="footer-btn" id="disconnect-btn">Sign out</button>
+    </div>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

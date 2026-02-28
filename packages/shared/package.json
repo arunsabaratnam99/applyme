@@ -1,0 +1,29 @@
+{
+  "name": "@applyme/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types/index.ts",
+    "./schemas": "./src/schemas/index.ts",
+    "./canonicalize": "./src/canonicalize.ts",
+    "./scoring": "./src/scoring.ts",
+    "./classify": "./src/classify.ts",
+    "./tier1Companies": "./src/tier1Companies.ts",
+    "./companyPeers": "./src/companyPeers.ts",
+    "./utils": "./src/utils.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.3.1"
+  }
+}

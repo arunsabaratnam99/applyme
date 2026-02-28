@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "ApplyMe Autofill",
+  "version": "0.1.0",
+  "description": "Autofill job applications for ApplyMe users",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://*.ashbyhq.com/*",
+    "https://*.lever.co/*",
+    "https://*.greenhouse.io/*",
+    "https://jobs.gc.ca/*",
+    "https://emplois.gc.ca/*",
+    "https://*.workable.com/*",
+    "https://*.smartrecruiters.com/*",
+    "https://*.jobvite.com/*",
+    "https://*.icims.com/*",
+    "https://*.taleo.net/*",
+    "https://*.successfactors.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ApplyMe Autofill",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.ashbyhq.com/*",
+        "https://*.lever.co/*",
+        "https://*.greenhouse.io/*",
+        "https://jobs.gc.ca/*",
+        "https://emplois.gc.ca/*",
+        "https://*.workable.com/*",
+        "https://*.smartrecruiters.com/*",
+        "https://*.jobvite.com/*",
+        "https://*.icims.com/*",
+        "https://*.taleo.net/*",
+        "https://*.successfactors.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

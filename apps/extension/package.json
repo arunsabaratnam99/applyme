@@ -1,0 +1,17 @@
+{
+  "name": "@applyme/extension",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "web-ext run --source-dir dist",
+    "build": "tsc && node scripts/build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "@types/firefox-webext-browser": "^120.0.0",
+    "esbuild": "^0.20.2",
+    "typescript": "^5.3.3",
+    "web-ext": "^8.2.0"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "jobs": [
+    {
+      "id": 9001,
+      "title": "Backend Engineer (Go)",
+      "updated_at": "2025-02-05T12:00:00Z",
+      "location": { "name": "Toronto, ON, Canada" },
+      "absolute_url": "https://boards.greenhouse.io/testco/jobs/9001",
+      "departments": [{ "id": 10, "name": "Engineering" }],
+      "offices": [{ "id": 20, "name": "Toronto" }],
+      "content": "<p>Join our backend team working in Go and Kubernetes.</p>",
+      "metadata": []
+    },
+    {
+      "id": 9002,
+      "title": "Marketing Analyst",
+      "updated_at": "2025-02-03T09:00:00Z",
+      "location": { "name": "Vancouver, BC, Canada" },
+      "absolute_url": "https://boards.greenhouse.io/testco/jobs/9002",
+      "departments": [{ "id": 11, "name": "Marketing" }],
+      "offices": [{ "id": 21, "name": "Vancouver" }],
+      "content": "<p>Data-driven marketing analyst role. SQL and Excel required.</p>",
+      "metadata": []
+    }
+  ]
+}

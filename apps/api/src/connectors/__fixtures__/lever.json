@@ -1,0 +1,38 @@
+{
+  "data": [
+    {
+      "id": "lever-001",
+      "text": "Senior Frontend Engineer",
+      "state": "published",
+      "hostedUrl": "https://jobs.lever.co/testco/lever-001",
+      "applyUrl": "https://jobs.lever.co/testco/lever-001/apply",
+      "createdAt": 1706745600000,
+      "categories": {
+        "department": "Engineering",
+        "location": "Toronto, ON",
+        "team": "Frontend",
+        "commitment": "Full-time"
+      },
+      "descriptionPlain": "We are hiring a senior React and TypeScript engineer.",
+      "lists": [],
+      "additional": ""
+    },
+    {
+      "id": "lever-002",
+      "text": "Data Science Co-op",
+      "state": "published",
+      "hostedUrl": "https://jobs.lever.co/testco/lever-002",
+      "applyUrl": "https://jobs.lever.co/testco/lever-002/apply",
+      "createdAt": 1706659200000,
+      "categories": {
+        "department": "Data",
+        "location": "Remote, Canada",
+        "team": "ML",
+        "commitment": "Co-op"
+      },
+      "descriptionPlain": "4-month co-op term for data science students.",
+      "lists": [],
+      "additional": ""
+    }
+  ]
+}

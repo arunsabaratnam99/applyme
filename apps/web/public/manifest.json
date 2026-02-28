@@ -1,0 +1,13 @@
+{
+  "name": "ApplyMe",
+  "short_name": "ApplyMe",
+  "description": "Job matcher & assisted apply for Canadian software and business roles",
+  "start_url": "/jobs",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1d6fd4",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
