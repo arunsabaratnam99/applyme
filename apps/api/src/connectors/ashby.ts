@@ -1,6 +1,7 @@
 import { classifyJobCategory, classifyEmploymentType } from '@applyme/shared/classify';
 import { computeCanonicalUrlHash, computeFingerprint } from '@applyme/shared/canonicalize';
 import { isCanadianLocation, normalizeLocation } from '@applyme/shared/utils';
+import type { RequestBudget } from './linkedin_scraper.js';
 
 export interface NormalizedJob {
   externalId: string;
@@ -19,10 +20,14 @@ export interface NormalizedJob {
   employmentType: string;
   canonicalUrlHash: string;
   fingerprint: string;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
 }
 
-export async function fetchAshbyJobs(boardSlug: string): Promise<NormalizedJob[]> {
+export async function fetchAshbyJobs(boardSlug: string, budget?: RequestBudget): Promise<NormalizedJob[]> {
+  if (budget && budget.used >= budget.limit) return [];
   const url = `https://api.ashbyhq.com/posting-public/apiKey/${boardSlug}/jobs`;
+  if (budget) budget.used++;
   const res = await fetch(url);
   if (!res.ok) return [];
 
@@ -38,8 +43,8 @@ export async function fetchAshbyJobs(boardSlug: string): Promise<NormalizedJob[]
     if (!category) continue;
 
     const jobUrl = `https://jobs.ashbyhq.com/${boardSlug}/${job.id}`;
-    const canonicalUrlHash = await computeCanonicalUrlHash(jobUrl);
-    const fingerprint = await computeFingerprint({
+    const canonicalUrlHash = computeCanonicalUrlHash(jobUrl);
+    const fingerprint = computeFingerprint({
       company: boardSlug,
       title: job.title,
       location: normalizeLocation(location),

@@ -71,10 +71,20 @@ const config: Config = {
           from: { opacity: '0', transform: 'translateX(-8px)' },
           to: { opacity: '1', transform: 'translateX(0)' },
         },
+        'slide-in-right': {
+          from: { opacity: '0', transform: 'translateX(100%)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
+        'popover-in': {
+          from: { opacity: '0', transform: 'scale(0.95) translateY(-4px)' },
+          to: { opacity: '1', transform: 'scale(1) translateY(0)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 150ms ease-out',
         'slide-in': 'slide-in 150ms ease-out',
+        'slide-in-right': 'slide-in-right 240ms cubic-bezier(0.32, 0.72, 0, 1)',
+        'popover-in': 'popover-in 180ms cubic-bezier(0.16, 1, 0.3, 1)',
       },
     },
   },

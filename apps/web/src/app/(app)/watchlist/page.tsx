@@ -68,6 +68,30 @@ export default function WatchlistPage() {
   const [showSearch, setShowSearch] = React.useState(false);
 
   async function handleAdd(company: ClearbitCompany) {
+    const tempId = `temp-${Date.now()}`;
+    const tempItem: WatchlistItem = {
+      id: tempId,
+      itemType: 'company',
+      value: company.name,
+      domain: company.domain,
+      companyTier: 'standard',
+      autoDiscoverPeers: false,
+      atsUrl: null,
+      notifyNewJobs: true,
+      notifyRoleChanges: false,
+      notifyFunding: false,
+      notifyHeadcount: false,
+    };
+    // Close search first so the new card doesn't flash under the open panel
+    setShowSearch(false);
+    // Optimistic: add immediately
+    await mutate(
+      KEY,
+      (cur: WatchlistResponse | undefined) => cur
+        ? { ...cur, items: [...cur.items, tempItem] }
+        : { id: '', label: 'My Watchlist', items: [tempItem], peerMap: {} },
+      { revalidate: false },
+    );
     try {
       await api.post('/api/watchlist/items', {
         itemType: 'company',
@@ -76,25 +100,63 @@ export default function WatchlistPage() {
         companyTier: 'standard',
         autoDiscoverPeers: false,
       });
-      await mutate(KEY);
-      setShowSearch(false);
+      await mutate(KEY); // replace temp with real data
       toast({ title: `Added ${company.name} to watchlist` });
     } catch {
+      // Revert on failure
+      await mutate(
+        KEY,
+        (cur: WatchlistResponse | undefined) => cur
+          ? { ...cur, items: cur.items.filter((i) => i.id !== tempId) }
+          : cur,
+        { revalidate: false },
+      );
       toast({ title: 'Failed to add company', variant: 'destructive' });
     }
   }
 
   async function handleDelete(id: string, value: string) {
+    // Optimistic: remove immediately
+    await mutate(
+      KEY,
+      (cur: WatchlistResponse | undefined) => cur
+        ? { ...cur, items: cur.items.filter((i) => i.id !== id) }
+        : cur,
+      { revalidate: false },
+    );
+    if (expandedId === id) setExpandedId(null);
     try {
       await api.delete(`/api/watchlist/items/${id}`);
       await mutate(KEY);
       toast({ title: `Removed "${value}"` });
     } catch {
+      await mutate(KEY); // revert by revalidating
       toast({ title: 'Failed to remove', variant: 'destructive' });
     }
   }
 
   async function handleAddPeer(peerName: string) {
+    const tempId = `temp-${Date.now()}`;
+    const tempItem: WatchlistItem = {
+      id: tempId,
+      itemType: 'company',
+      value: peerName,
+      domain: null,
+      companyTier: 'standard',
+      autoDiscoverPeers: false,
+      atsUrl: null,
+      notifyNewJobs: true,
+      notifyRoleChanges: false,
+      notifyFunding: false,
+      notifyHeadcount: false,
+    };
+    await mutate(
+      KEY,
+      (cur: WatchlistResponse | undefined) => cur
+        ? { ...cur, items: [...cur.items, tempItem] }
+        : { id: '', label: 'My Watchlist', items: [tempItem], peerMap: {} },
+      { revalidate: false },
+    );
     try {
       await api.post('/api/watchlist/items', {
         itemType: 'company',
@@ -106,6 +168,13 @@ export default function WatchlistPage() {
       await mutate(KEY);
       toast({ title: `Added "${peerName}"` });
     } catch {
+      await mutate(
+        KEY,
+        (cur: WatchlistResponse | undefined) => cur
+          ? { ...cur, items: cur.items.filter((i) => i.id !== tempId) }
+          : cur,
+        { revalidate: false },
+      );
       toast({ title: 'Failed to add peer', variant: 'destructive' });
     }
   }
@@ -136,7 +205,8 @@ export default function WatchlistPage() {
   const watchedNames = new Set(data?.items.map((i) => i.value.toLowerCase()) ?? []);
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="h-full overflow-y-auto">
+    <div className="p-6 max-w-3xl mx-auto pb-10">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -355,25 +425,106 @@ export default function WatchlistPage() {
         </div>
       )}
     </div>
+    </div>
   );
 }
 
-/* ── Company search with Clearbit autocomplete ───────────────── */
+/* ── Company search ─────────────────────────────────────────── */
 
-const POPULAR: ClearbitCompany[] = [
-  { name: 'Shopify',    domain: 'shopify.com',    logo: 'https://logo.clearbit.com/shopify.com' },
-  { name: 'Google',     domain: 'google.com',     logo: 'https://logo.clearbit.com/google.com' },
-  { name: 'Microsoft',  domain: 'microsoft.com',  logo: 'https://logo.clearbit.com/microsoft.com' },
-  { name: 'Amazon',     domain: 'amazon.com',     logo: 'https://logo.clearbit.com/amazon.com' },
-  { name: 'Meta',       domain: 'meta.com',       logo: 'https://logo.clearbit.com/meta.com' },
-  { name: 'Stripe',     domain: 'stripe.com',     logo: 'https://logo.clearbit.com/stripe.com' },
-  { name: 'Atlassian',  domain: 'atlassian.com',  logo: 'https://logo.clearbit.com/atlassian.com' },
-  { name: 'Figma',      domain: 'figma.com',      logo: 'https://logo.clearbit.com/figma.com' },
-  { name: 'Notion',     domain: 'notion.so',      logo: 'https://logo.clearbit.com/notion.so' },
-  { name: 'Vercel',     domain: 'vercel.com',     logo: 'https://logo.clearbit.com/vercel.com' },
-  { name: 'Linear',     domain: 'linear.app',     logo: 'https://logo.clearbit.com/linear.app' },
-  { name: 'Snowflake',  domain: 'snowflake.com',  logo: 'https://logo.clearbit.com/snowflake.com' },
+function mkc(name: string, domain: string): ClearbitCompany {
+  return { name, domain, logo: `/api/logo?domain=${encodeURIComponent(domain)}` };
+}
+
+const ALL_COMPANIES: ClearbitCompany[] = [
+  // Big Tech
+  mkc('Google',      'google.com'),
+  mkc('Microsoft',   'microsoft.com'),
+  mkc('Apple',       'apple.com'),
+  mkc('Amazon',      'amazon.com'),
+  mkc('Meta',        'meta.com'),
+  mkc('Netflix',     'netflix.com'),
+  mkc('Spotify',     'spotify.com'),
+  mkc('Uber',        'uber.com'),
+  mkc('Airbnb',      'airbnb.com'),
+  mkc('Salesforce',  'salesforce.com'),
+  mkc('Oracle',      'oracle.com'),
+  mkc('SAP',         'sap.com'),
+  // Developer Tools / Cloud
+  mkc('GitHub',      'github.com'),
+  mkc('Vercel',      'vercel.com'),
+  mkc('Linear',      'linear.app'),
+  mkc('Figma',       'figma.com'),
+  mkc('Notion',      'notion.so'),
+  mkc('Atlassian',   'atlassian.com'),
+  mkc('Stripe',      'stripe.com'),
+  mkc('Twilio',      'twilio.com'),
+  mkc('Cloudflare',  'cloudflare.com'),
+  mkc('Snowflake',   'snowflake.com'),
+  mkc('Databricks',  'databricks.com'),
+  mkc('HashiCorp',   'hashicorp.com'),
+  mkc('PlanetScale', 'planetscale.com'),
+  mkc('Supabase',    'supabase.com'),
+  mkc('Retool',      'retool.com'),
+  mkc('Postman',     'postman.com'),
+  mkc('Datadog',     'datadoghq.com'),
+  mkc('New Relic',   'newrelic.com'),
+  // Fintech / Payments
+  mkc('Shopify',     'shopify.com'),
+  mkc('Wealthsimple','wealthsimple.com'),
+  mkc('Nuvei',       'nuvei.com'),
+  mkc('Lightspeed',  'lightspeedhq.com'),
+  mkc('Clearco',     'clearco.com'),
+  mkc('Koho Financial', 'koho.ca'),
+  mkc('Neo Financial',  'neo.ca'),
+  mkc('Borrowell',   'borrowell.com'),
+  mkc('TouchBistro', 'touchbistro.com'),
+  // Canadian AI / Tech
+  mkc('Cohere',      'cohere.com'),
+  mkc('Waabi',       'waabi.ai'),
+  mkc('BorealisAI',  'borealisai.com'),
+  mkc('Layer 6',     'layer6.ai'),
+  mkc('Darwin AI',   'darwinai.ca'),
+  mkc('OpenAI',      'openai.com'),
+  mkc('Anthropic',   'anthropic.com'),
+  mkc('Mistral',     'mistral.ai'),
+  mkc('Hugging Face','huggingface.co'),
+  mkc('Perplexity',  'perplexity.ai'),
+  // Canadian Enterprise / Supply Chain
+  mkc('Kinaxis',     'kinaxis.com'),
+  mkc('OpenText',    'opentext.com'),
+  mkc('Ceridian',    'ceridian.com'),
+  mkc('Descartes Systems', 'descartes.com'),
+  mkc('Tecsys',      'tecsys.com'),
+  // Canadian Health / Edtech
+  mkc('PointClickCare', 'pointclickcare.com'),
+  mkc('Jane App',    'janeapp.com'),
+  mkc('Maple',       'getmaple.ca'),
+  mkc('D2L',         'd2l.com'),
+  mkc('Top Hat',     'tophat.com'),
+  // Canadian Telco / Aerospace
+  mkc('Telus',       'telus.com'),
+  mkc('Rogers',      'rogers.com'),
+  mkc('Bell Canada', 'bell.ca'),
+  mkc('BlackBerry',  'blackberry.com'),
+  mkc('Bombardier',  'bombardier.com'),
+  mkc('CAE',         'cae.com'),
+  // HR Tech
+  mkc('Humi',        'humi.ca'),
+  mkc('Rippling',    'rippling.com'),
+  mkc('Workday',     'workday.com'),
+  mkc('Greenhouse',  'greenhouse.io'),
+  mkc('Lever',       'lever.co'),
+  mkc('Lattice',     'lattice.com'),
+  // Cybersecurity
+  mkc('CrowdStrike', 'crowdstrike.com'),
+  mkc('SentinelOne', 'sentinelone.com'),
+  mkc('Palo Alto Networks', 'paloaltonetworks.com'),
+  mkc('Arctic Wolf', 'arcticwolf.com'),
+  mkc('eSentire',    'esentire.com'),
 ];
+
+const POPULAR_NAMES = new Set(['Shopify', 'Google', 'Microsoft', 'Amazon', 'Meta', 'Stripe', 'Atlassian', 'Figma', 'Notion', 'Vercel', 'Linear', 'Snowflake']);
+const POPULAR = ALL_COMPANIES.filter((c) => POPULAR_NAMES.has(c.name));
 
 function CompanySearch({
   alreadyWatched,
@@ -384,8 +535,10 @@ function CompanySearch({
 }) {
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<ClearbitCompany[]>(POPULAR);
+  const [noResults, setNoResults] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = React.useRef<AbortController | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -395,21 +548,31 @@ function CompanySearch({
   async function search(q: string) {
     if (!q.trim()) {
       setResults(POPULAR);
+      setNoResults(false);
+      setLoading(false);
       return;
     }
+    // Cancel previous in-flight request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     try {
       const res = await fetch(
-        `https://autocomplete.clearbit.com/v1/companies/suggest?query=${encodeURIComponent(q)}`,
+        `/api/companies/search?q=${encodeURIComponent(q)}`,
+        { signal: controller.signal },
       );
-      if (res.ok) {
-        const data = (await res.json()) as ClearbitCompany[];
-        setResults(data.slice(0, 10));
+      if (!res.ok) throw new Error();
+      const data = (await res.json()) as ClearbitCompany[];
+      setResults(data);
+      setNoResults(data.length === 0);
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') {
+        setResults([]);
+        setNoResults(true);
       }
-    } catch {
-      setResults([]);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }
 
@@ -417,7 +580,7 @@ function CompanySearch({
     const val = e.target.value;
     setQuery(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => search(val), 180);
+    debounceRef.current = setTimeout(() => search(val), 250);
   }
 
   return (
@@ -430,7 +593,7 @@ function CompanySearch({
           value={query}
           onChange={handleChange}
           placeholder="Search companies…"
-          className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          className="flex-1 bg-transparent text-sm outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground"
         />
         {loading && (
           <span className="h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0" />
@@ -439,7 +602,7 @@ function CompanySearch({
 
       {/* Results */}
       <div className="max-h-72 overflow-y-auto">
-        {!loading && results.length === 0 && (
+        {noResults && (
           <p className="px-4 py-3 text-sm text-muted-foreground">No results for "{query}"</p>
         )}
 
@@ -484,8 +647,11 @@ function CompanySearch({
 
 /* ── Logo helpers ────────────────────────────────────────────── */
 
-function ClearbitLogo({ logo, name, size }: { logo: string; name: string; size: number }) {
+const ClearbitLogo = React.memo(function ClearbitLogo({ logo, name, size }: { logo: string; name: string; size: number }) {
   const [err, setErr] = React.useState(false);
+
+  React.useEffect(() => { setErr(false); }, [logo]);
+
   if (err || !logo) return <LogoFallback name={name} size={size} />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -494,51 +660,54 @@ function ClearbitLogo({ logo, name, size }: { logo: string; name: string; size: 
       alt={name}
       width={size}
       height={size}
-      referrerPolicy="no-referrer"
       onError={() => setErr(true)}
-      className="rounded-md object-contain shrink-0 bg-white p-0.5"
+      className="rounded-md object-contain shrink-0"
       style={{ width: size, height: size }}
     />
   );
-}
+});
 
-function CompanyLogo({ domain, name, size }: { domain: string | null; name: string; size: number }) {
+const CompanyLogo = React.memo(function CompanyLogo({ domain, name, size }: { domain: string | null; name: string; size: number }) {
   const guessedDomain = domain ?? (name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com');
   const [err, setErr] = React.useState(false);
+
+  React.useEffect(() => { setErr(false); }, [guessedDomain]);
+
   if (err) return <LogoFallback name={name} size={size} />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`https://logo.clearbit.com/${guessedDomain}`}
+      src={`/api/logo?domain=${encodeURIComponent(guessedDomain)}`}
       alt={name}
       width={size}
       height={size}
-      referrerPolicy="no-referrer"
       onError={() => setErr(true)}
-      className="rounded-lg object-contain shrink-0 bg-white p-0.5 border border-border"
+      className="rounded-lg object-contain shrink-0"
       style={{ width: size, height: size }}
     />
   );
-}
+});
 
-function PeerLogo({ name, size }: { name: string; size: number }) {
+const PeerLogo = React.memo(function PeerLogo({ name, size }: { name: string; size: number }) {
   const domain = name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
   const [err, setErr] = React.useState(false);
+
+  React.useEffect(() => { setErr(false); }, [domain]);
+
   if (err) return <LogoFallback name={name} size={size} />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`https://logo.clearbit.com/${domain}`}
+      src={`/api/logo?domain=${encodeURIComponent(domain)}`}
       alt={name}
       width={size}
       height={size}
-      referrerPolicy="no-referrer"
       onError={() => setErr(true)}
       className="rounded-sm object-contain shrink-0"
       style={{ width: size, height: size }}
     />
   );
-}
+});
 
 function LogoFallback({ name, size }: { name: string; size: number }) {
   return (

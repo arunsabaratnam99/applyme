@@ -15,6 +15,8 @@ export const jobSources = pgTable('job_sources', {
   sourceType: text('source_type').notNull(),
   config: jsonb('config').notNull().default({}),
   enabled: boolean('enabled').notNull().default(true),
+  lastFetchedAt: timestamp('last_fetched_at', { withTimezone: true }),
+  lastExternalIds: jsonb('last_external_ids').default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -43,6 +45,8 @@ export const jobs = pgTable(
     sourceType: text('source_type').notNull(),
     jobCategory: text('job_category').notNull(),
     employmentType: text('employment_type').notNull().default('full_time'),
+    salaryMin: text('salary_min'),
+    salaryMax: text('salary_max'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

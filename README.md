@@ -152,6 +152,12 @@ cd apps/api
 pnpm deploy
 ```
 
+Or use the repo deploy helper:
+
+```bash
+./scripts/deploy.sh api:prod
+```
+
 ### Web (Vercel)
 
 ```bash
@@ -159,6 +165,31 @@ cd apps/web
 pnpm build
 # Deploy via Vercel CLI or connect GitHub repo
 ```
+
+Or use the repo deploy helper (requires Vercel CLI):
+
+```bash
+./scripts/deploy.sh web:prod
+```
+
+### Deploy helper script
+
+The script supports local/remote API dev, and web deploys:
+
+```bash
+./scripts/deploy.sh api:local
+./scripts/deploy.sh api:remote
+./scripts/deploy.sh api:prod
+
+./scripts/deploy.sh web:preview
+./scripts/deploy.sh web:prod
+
+./scripts/deploy.sh all:prod
+```
+
+Prereqs:
+- **API**: `wrangler login` (Cloudflare auth)
+- **Web**: `vercel login` (Vercel auth)
 
 ### Database (Neon)
 

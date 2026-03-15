@@ -17,6 +17,7 @@ export interface Env {
   R2_SECRET_ACCESS_KEY: string;
   R2_BUCKET_NAME: string;
   R2_ENDPOINT: string;
+  R2_PUBLIC_URL: string;
 
   // VAPID
   VAPID_PUBLIC_KEY: string;
@@ -27,17 +28,27 @@ export interface Env {
   EMAIL_ENABLED: string;
   RESEND_API_KEY?: string;
 
-  // LinkedIn
-  LINKEDIN_ENABLED: string;
-  LINKEDIN_CLIENT_ID?: string;
-  LINKEDIN_CLIENT_SECRET?: string;
+  // LinkedIn scraper (public job feed, no API approval needed)
+  LINKEDIN_SCRAPER_ENABLED: string;
 
-  // Indeed
-  INDEED_ENABLED: string;
-  INDEED_PUBLISHER_ID?: string;
+  // Indeed scraper — uses JSearch API via RapidAPI (free tier)
+  INDEED_SCRAPER_ENABLED: string;
+  RAPIDAPI_KEY?: string;
 
   // Sentry
   SENTRY_DSN?: string;
+
+  // Workers AI
+  AI: { run: (model: string, input: Record<string, unknown>) => Promise<{ response?: string }> };
+  AI_ENABLED: string;
+
+  // Browser Rendering (Cloudflare)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  BROWSER: any;
+  BROWSER_ENABLED: string;
+
+  // Admin
+  CRON_SECRET?: string;
 }
 
 export interface Variables {

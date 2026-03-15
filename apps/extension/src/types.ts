@@ -31,12 +31,35 @@ export interface Education {
   gpa: string;
 }
 
+export interface FieldMapEntry {
+  fieldKey: string;
+  selector: string | null;
+  label: string;
+  profileValue: string;
+  inputType: string;
+}
+
+export interface FieldMap {
+  fields: FieldMapEntry[];
+  atsType: string;
+  domain: string;
+  learnedAt: string | null;
+}
+
 export interface QueueItem {
   id: string;
   jobId: string;
   applyUrl: string;
   atsType: AtsType;
+  fieldMap: FieldMap;
   resumeData: ResumeData;
+}
+
+export interface AutofillProfile {
+  atsType: string;
+  enabled: boolean;
+  fieldOverrides: Record<string, string>;
+  unknownFields: Array<{ fieldKey: string; label: string; userValue: string }>;
 }
 
 export type AtsType =
@@ -57,8 +80,12 @@ export type MessageType =
   | { type: 'QUEUE_RESULT'; items: QueueItem[] }
   | { type: 'AUTOFILL_START'; item: QueueItem }
   | { type: 'AUTOFILL_DONE'; itemId: string; success: boolean; error?: string }
+  | { type: 'REPORT_UNKNOWN_FIELD'; itemId: string; fieldKey: string; label: string }
+  | { type: 'AUTOFILL_ERROR'; itemId: string; errorDetail: string }
   | { type: 'GET_AUTH_TOKEN' }
-  | { type: 'AUTH_TOKEN_RESULT'; token: string | null };
+  | { type: 'AUTH_TOKEN_RESULT'; token: string | null }
+  | { type: 'GET_PROFILES' }
+  | { type: 'PROFILES_RESULT'; profiles: AutofillProfile[] };
 
 export interface StorageState {
   authToken: string | null;

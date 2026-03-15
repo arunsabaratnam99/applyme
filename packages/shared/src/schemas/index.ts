@@ -46,7 +46,31 @@ export const AutofillQueueStatusSchema = z.enum([
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
+export const DealBreakerFieldsSchema = z.object({
+  employmentTypes: z.boolean().optional().default(false),
+  jobCategories: z.boolean().optional().default(false),
+  workplaceType: z.boolean().optional().default(false),
+});
+
+const WorkEntrySchema = z.object({
+  company: z.string().max(200).optional().default(''),
+  title: z.string().max(200).optional().default(''),
+  startDate: z.string().max(50).optional().default(''),
+  endDate: z.string().max(50).optional().default(''),
+  description: z.string().max(1000).optional().default(''),
+});
+
+const EducationEntrySchema = z.object({
+  institution: z.string().max(200).optional().default(''),
+  degree: z.string().max(200).optional().default(''),
+  field: z.string().max(200).optional().default(''),
+  startYear: z.string().max(10).optional().default(''),
+  endYear: z.string().max(10).optional().default(''),
+});
+
 export const UpdateProfileSchema = z.object({
+  displayName: z.string().max(100).nullable().optional(),
+  country: z.string().length(2).optional(),
   locations: z.array(z.string().min(1)).optional(),
   preferredRemote: z.boolean().optional(),
   salaryMin: z.number().int().positive().nullable().optional(),
@@ -55,8 +79,27 @@ export const UpdateProfileSchema = z.object({
   keywords: z.array(z.string().min(1)).optional(),
   roles: z.array(z.string().min(1)).optional(),
   excludeKeywords: z.array(z.string().min(1)).optional(),
-  jobCategories: z.array(JobCategorySchema).min(1).optional(),
-  employmentTypes: z.array(EmploymentTypeSchema).min(1).optional(),
+  jobCategories: z.array(JobCategorySchema).optional(),
+  employmentTypes: z.array(EmploymentTypeSchema).optional(),
+  dealBreakerFields: DealBreakerFieldsSchema.optional(),
+  phone: z.string().max(30).nullable().optional(),
+  linkedinUrl: z.string().url().nullable().optional(),
+  githubUrl: z.string().url().nullable().optional(),
+  websiteUrl: z.string().url().nullable().optional(),
+  applyEmail: z.string().email().nullable().optional(),
+  quickApplyAll: z.boolean().optional(),
+  tier1QuickApply: z.boolean().optional(),
+  headline: z.string().max(200).nullable().optional(),
+  summary: z.string().max(2000).nullable().optional(),
+  yearsOfExperience: z.number().int().min(0).max(60).nullable().optional(),
+  workExperience: z.array(WorkEntrySchema).optional(),
+  education: z.array(EducationEntrySchema).optional(),
+  earliestStartDate: z.string().max(50).nullable().optional(),
+  willingToRelocate: z.boolean().nullable().optional(),
+  preferredPronouns: z.string().max(50).nullable().optional(),
+  ethnicity: z.string().max(100).nullable().optional(),
+  veteranStatus: z.string().max(100).nullable().optional(),
+  disabilityStatus: z.string().max(100).nullable().optional(),
 });
 
 // ─── Resume ──────────────────────────────────────────────────────────────────
@@ -78,9 +121,15 @@ export const CreateResumeVersionSchema = z.object({
 
 export const JobsQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional().default(1),
-  limit: z.coerce.number().int().positive().max(50).optional().default(20),
-  category: JobCategorySchema.optional(),
-  employmentType: EmploymentTypeSchema.optional(),
+  limit: z.coerce.number().int().positive().max(5000).optional().default(20),
+  category: z.preprocess(
+    (v) => (typeof v === 'string' && v.includes(',') ? v.split(',') : v),
+    z.union([JobCategorySchema, z.array(JobCategorySchema)]).optional(),
+  ),
+  employmentType: z.preprocess(
+    (v) => (typeof v === 'string' && v.includes(',') ? v.split(',') : v),
+    z.union([EmploymentTypeSchema, z.array(EmploymentTypeSchema)]).optional(),
+  ),
   workplaceType: WorkplaceTypeSchema.optional(),
 });
 
@@ -165,7 +214,38 @@ export const UpdateNotificationPrefsSchema = z.object({
   digestMode: z.boolean().optional(),
 });
 
-// ─── Autofill Queue ───────────────────────────────────────────────────────────
+// ─── Autofill Profiles ────────────────────────────────────────────────────────────
+
+export const UnknownFieldSchema = z.object({
+  fieldKey: z.string(),
+  label: z.string(),
+  userValue: z.string().default(''),
+});
+
+export const UpdateAutofillProfileSchema = z.object({
+  enabled: z.boolean().optional(),
+  fieldOverrides: z.record(z.string()).optional(),
+  unknownFields: z.array(UnknownFieldSchema).optional(),
+});
+
+export const ReportUnknownFieldSchema = z.object({
+  fieldKey: z.string(),
+  label: z.string(),
+});
+
+export const AutofillErrorSchema = z.object({
+  errorDetail: z.string().max(2000),
+});
+
+export const QuickApplySchema = z.object({
+  resumeVersionId: z.string().uuid().optional(),
+});
+
+export const ToggleAllAutofillSchema = z.object({
+  enabled: z.boolean(),
+});
+
+// ─── Autofill Queue ────────────────────────────────────────────────────────────
 
 export const CompleteAutofillSchema = z.object({
   submittedFields: z.record(z.string()),

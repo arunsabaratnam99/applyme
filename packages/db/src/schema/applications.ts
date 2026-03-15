@@ -9,8 +9,8 @@ import {
   integer,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { users } from './users.js';
-import { jobs } from './jobs.js';
+import { users } from './users';
+import { jobs } from './jobs';
 
 export const jobMatches = pgTable(
   'job_matches',
@@ -118,6 +118,10 @@ export const autofillQueue = pgTable(
     atsType: text('ats_type').notNull().default('unknown'),
     fieldMap: jsonb('field_map').notNull().default({ fields: [], atsType: 'unknown', domain: '', learnedAt: null }),
     status: text('status').notNull().default('pending'),
+    errorDetail: text('error_detail'),
+    attemptedAt: timestamp('attempted_at', { withTimezone: true }),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    submissionResponse: jsonb('submission_response'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   },
@@ -126,6 +130,24 @@ export const autofillQueue = pgTable(
     statusIdx: index('autofill_status_idx').on(table.status),
     expiresAtIdx: index('autofill_expires_at_idx').on(table.expiresAt),
     pendingIdx: index('autofill_pending_idx').on(table.userId, table.status),
+  }),
+);
+
+export const autofillProfiles = pgTable(
+  'autofill_profiles',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    atsType: text('ats_type').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    fieldOverrides: jsonb('field_overrides').notNull().default({}),
+    unknownFields: jsonb('unknown_fields').notNull().default([]),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: index('autofill_profiles_pk_idx').on(table.userId, table.atsType),
+    userIdIdx: index('autofill_profiles_user_id_idx').on(table.userId),
   }),
 );
 
@@ -158,4 +180,8 @@ export const autofillQueueRelations = relations(autofillQueue, ({ one }) => ({
   user: one(users, { fields: [autofillQueue.userId], references: [users.id] }),
   job: one(jobs, { fields: [autofillQueue.jobId], references: [jobs.id] }),
   draft: one(applicationDrafts, { fields: [autofillQueue.draftId], references: [applicationDrafts.id] }),
+}));
+
+export const autofillProfilesRelations = relations(autofillProfiles, ({ one }) => ({
+  user: one(users, { fields: [autofillProfiles.userId], references: [users.id] }),
 }));

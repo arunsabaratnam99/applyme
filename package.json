@@ -10,6 +10,7 @@
     "build": "pnpm -r build",
     "dev:web": "pnpm --filter @applyme/web dev",
     "dev:api": "pnpm --filter @applyme/api dev",
+    "dev:api:remote": "pnpm --filter @applyme/api dev:remote",
     "db:generate": "pnpm --filter @applyme/db generate",
     "db:migrate": "pnpm --filter @applyme/db migrate",
     "db:studio": "pnpm --filter @applyme/db studio",

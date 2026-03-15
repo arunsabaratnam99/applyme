@@ -9,13 +9,13 @@ describe('classifyJobCategory', () => {
   });
 
   it('classifies business roles', () => {
-    expect(classifyJobCategory('Product Manager', '')).toBe('business');
+    expect(classifyJobCategory('Financial Analyst', '')).toBe('business');
     expect(classifyJobCategory('Business Analyst', '')).toBe('business');
     expect(classifyJobCategory('Marketing Manager', '')).toBe('business');
   });
 
   it('uses description fallback when title is ambiguous', () => {
-    const result = classifyJobCategory('Associate', 'write Python scripts and deploy microservices');
+    const result = classifyJobCategory('Apprentice', 'write Python scripts and deploy microservices using AWS and Docker');
     expect(result).toBe('software');
   });
 
@@ -42,6 +42,23 @@ describe('classifyEmploymentType', () => {
 
   it('defaults to full_time when ambiguous', () => {
     expect(classifyEmploymentType('Join our team')).toBe('full_time');
+  });
+
+  it('does NOT classify senior roles as internship (regression)', () => {
+    expect(classifyEmploymentType('Senior Associate, Fraud Strategy Analyst')).toBe('full_time');
+    expect(classifyEmploymentType('Senior Associate, Product Strategy Analyst')).toBe('full_time');
+    expect(classifyEmploymentType('Senior Associate')).toBe('full_time');
+    expect(classifyEmploymentType('Lead Software Engineer')).toBe('full_time');
+    expect(classifyEmploymentType('Staff Engineer')).toBe('full_time');
+    expect(classifyEmploymentType('Principal Product Manager')).toBe('full_time');
+  });
+
+  it('correctly classifies explicit intern titles', () => {
+    expect(classifyEmploymentType('Software Engineering Intern Summer 2025')).toBe('internship');
+    expect(classifyEmploymentType('Data Analyst Intern')).toBe('internship');
+    expect(classifyEmploymentType('Student Software Developer')).toBe('internship');
+    expect(classifyEmploymentType('Junior Software Engineer')).toBe('internship');
+    expect(classifyEmploymentType('New Grad Software Engineer')).toBe('internship');
   });
 });
 

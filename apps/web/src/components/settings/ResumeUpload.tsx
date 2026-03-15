@@ -4,12 +4,43 @@ import React from 'react';
 import { Upload, FileText, CheckCircle2, AlertCircle, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
+declare const process: { env: Record<string, string | undefined> };
+const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:8787';
+
+export interface WorkEntry {
+  company: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  description: string;
+}
+
+export interface EducationEntry {
+  institution: string;
+  degree: string;
+  field: string;
+  startYear: string;
+  endYear: string;
+}
+
 export interface ParsedResume {
   displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  websiteUrl?: string;
+  headline?: string;
+  summary?: string;
   roles?: string[];
   keywords?: string[];
   locations?: string[];
-  summary?: string;
+  location?: string;
+  workExperience?: WorkEntry[];
+  education?: EducationEntry[];
+  yearsOfExperience?: number;
 }
 
 interface ResumeUploadProps {
@@ -42,30 +73,51 @@ export function ResumeUpload({ onParsed, className }: ResumeUploadProps) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await fetch(`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:8787'}/api/resumes`, {
+      const res = await fetch('/api/resumes/parse', {
         method: 'POST',
-        credentials: 'include',
         body: formData,
       });
 
       if (!res.ok) throw new Error('Upload failed');
 
-      const json = (await res.json()) as {
-        parsed?: ParsedResume;
-        displayName?: string;
-        roles?: string[];
-        keywords?: string[];
-        locations?: string[];
-      };
+      const json = (await res.json()) as ParsedResume & { parsed?: ParsedResume };
 
-      const parsed: ParsedResume = json.parsed ?? Object.fromEntries(
-        Object.entries({
-          displayName: json.displayName,
-          roles: json.roles,
-          keywords: json.keywords,
-          locations: json.locations,
-        }).filter(([, v]) => v !== undefined),
-      ) as ParsedResume;
+      const parsed: ParsedResume = json.parsed ?? (json as ParsedResume);
+
+      // Persist the file to the API so it shows up in settings after reload
+      try {
+        const label = file.name.replace(/\.[^.]+$/, '');
+        const resumeRes = await fetch(`${API_BASE}/api/resumes`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label, isDefault: true }),
+        });
+        if (resumeRes.ok) {
+          const resume = (await resumeRes.json()) as { id: string };
+          const versionRes = await fetch(`${API_BASE}/api/resumes/${resume.id}/versions`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              versionLabel: 'v1',
+              isDefault: true,
+              mimeType: file.type,
+              fileSizeBytes: file.size,
+            }),
+          });
+          if (versionRes.ok) {
+            const { uploadUrl } = (await versionRes.json()) as { uploadUrl: string };
+            await fetch(uploadUrl, {
+              method: 'PUT',
+              body: file,
+              headers: { 'Content-Type': file.type },
+            });
+          }
+        }
+      } catch {
+        // Non-fatal: parsing succeeded, just couldn't persist
+      }
 
       setState('success');
       onParsed(parsed);

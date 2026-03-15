@@ -5,6 +5,7 @@ import {
   timestamp,
   boolean,
   jsonb,
+  integer,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -34,6 +35,8 @@ export const userProfiles = pgTable('user_profiles', {
   userId: uuid('user_id')
     .primaryKey()
     .references(() => users.id, { onDelete: 'cascade' }),
+  displayName: text('display_name'),
+  customAvatarUrl: text('custom_avatar_url'),
   locations: jsonb('locations').notNull().default([]),
   preferredRemote: boolean('preferred_remote').notNull().default(false),
   salaryMin: text('salary_min'),
@@ -45,6 +48,25 @@ export const userProfiles = pgTable('user_profiles', {
   country: text('country').notNull().default('CA'),
   jobCategories: jsonb('job_categories').notNull().default(['software', 'business']),
   employmentTypes: jsonb('employment_types').notNull().default(['full_time', 'internship', 'co_op']),
+  dealBreakerFields: jsonb('deal_breaker_fields').notNull().default({ employmentTypes: false, jobCategories: false, workplaceType: false }),
+  phone: text('phone'),
+  linkedinUrl: text('linkedin_url'),
+  githubUrl: text('github_url'),
+  websiteUrl: text('website_url'),
+  applyEmail: text('apply_email'),
+  quickApplyAll: boolean('quick_apply_all').notNull().default(true),
+  tier1QuickApply: boolean('tier1_quick_apply').notNull().default(false),
+  headline: text('headline'),
+  summary: text('summary'),
+  yearsOfExperience: integer('years_of_experience'),
+  workExperience: jsonb('work_experience').default([]),
+  education: jsonb('education').default([]),
+  earliestStartDate: text('earliest_start_date'),
+  willingToRelocate: boolean('willing_to_relocate').default(false),
+  preferredPronouns: text('preferred_pronouns'),
+  ethnicity: text('ethnicity'),
+  veteranStatus: text('veteran_status'),
+  disabilityStatus: text('disability_status'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -3,7 +3,6 @@ import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types.js';
 import {
   signSession,
-  setSessionCookie,
   clearSessionCookie,
 } from '../middleware/auth.js';
 import { schema } from '@applyme/db';
@@ -70,10 +69,8 @@ auth.get('/google/callback', async (c) => {
     c.env.JWT_SECRET,
   );
 
-  const isProd = !c.env.APP_BASE_URL.includes('localhost');
-  return c.redirect(c.env.APP_BASE_URL + '/jobs', 302, {
-    'Set-Cookie': setSessionCookie(token, isProd),
-  });
+  const callbackUrl = `${c.env.APP_BASE_URL}/api/auth/callback?token=${encodeURIComponent(token)}`;
+  return c.redirect(callbackUrl, 302);
 });
 
 // ─── GitHub OAuth ─────────────────────────────────────────────────────────────
@@ -139,10 +136,8 @@ auth.get('/github/callback', async (c) => {
     c.env.JWT_SECRET,
   );
 
-  const isProd = !c.env.APP_BASE_URL.includes('localhost');
-  return c.redirect(c.env.APP_BASE_URL + '/jobs', 302, {
-    'Set-Cookie': setSessionCookie(token, isProd),
-  });
+  const callbackUrl = `${c.env.APP_BASE_URL}/api/auth/callback?token=${encodeURIComponent(token)}`;
+  return c.redirect(callbackUrl, 302);
 });
 
 // ─── Logout ───────────────────────────────────────────────────────────────────

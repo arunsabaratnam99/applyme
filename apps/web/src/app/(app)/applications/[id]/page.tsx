@@ -4,7 +4,7 @@ import React from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, MapPin, Building2, Clock, ExternalLink } from 'lucide-react';
+import { ArrowLeft, MapPin, Building2, Clock, ExternalLink, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
@@ -43,6 +43,7 @@ export default function ApplicationDetailPage() {
     `/api/applications/${id}`,
     (url: string) => api.get<Application>(url),
   );
+  const [showFields, setShowFields] = React.useState(false);
 
   if (isLoading) {
     return (
@@ -74,14 +75,18 @@ export default function ApplicationDetailPage() {
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="secondary">{formatStatus(app.status)}</Badge>
-            {app.job?.applyUrl && (
-              <Button size="sm" variant="outline" asChild>
-                <a href={app.job.applyUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  View posting
-                </a>
-              </Button>
-            )}
+            {(() => {
+              const submittedApplyUrl = typeof app.submittedData?.['applyUrl'] === 'string' ? app.submittedData['applyUrl'] : null;
+              const viewUrl = submittedApplyUrl || app.job?.jobUrl || app.job?.applyUrl;
+              return viewUrl ? (
+                <Button size="sm" variant="outline" asChild>
+                  <a href={viewUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    View posting
+                  </a>
+                </Button>
+              ) : null;
+            })()}
           </div>
         </div>
 
@@ -107,6 +112,65 @@ export default function ApplicationDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Submitted Data */}
+      {app.submittedData && Object.keys(app.submittedData).length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-5 mb-4">
+          <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            What Was Submitted
+          </h2>
+
+          {/* Resume version — label only, no download */}
+          {app.submittedData['resumeVersionLabel'] != null && (
+            <div className="mb-4">
+              <p className="text-xs text-muted-foreground mb-1">Resume Version</p>
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted px-2.5 py-1 text-xs font-medium">
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                {`${app.submittedData['resumeVersionLabel']}`}
+              </span>
+            </div>
+          )}
+
+          {/* Cover letter */}
+          {app.submittedData['coverLetter'] != null && `${app.submittedData['coverLetter']}`.trim() && (
+            <div className="mb-4">
+              <p className="text-xs text-muted-foreground mb-1">Cover Letter</p>
+              <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                {`${app.submittedData['coverLetter']}`}
+              </div>
+            </div>
+          )}
+
+          {/* Field values */}
+          {app.submittedData['fieldValues'] != null && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowFields((v) => !v)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
+              >
+                {showFields ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                {showFields ? 'Hide' : 'Show'} form fields ({Object.keys(app.submittedData['fieldValues'] as Record<string, unknown>).length})
+              </button>
+              {showFields && (
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                  {Object.entries(app.submittedData['fieldValues'] as Record<string, unknown>)
+                    .filter(([, v]) => v != null && `${v}`.trim())
+                    .map(([key, value]) => (
+                      <div key={key} className="space-y-0.5">
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                          {key.replace(/_/g, ' ')}
+                        </p>
+                        <p className="text-xs text-foreground truncate">{`${value}`}</p>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="rounded-lg border border-border bg-card p-5">
         <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">

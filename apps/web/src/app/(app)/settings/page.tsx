@@ -5,28 +5,68 @@ import useSWR, { mutate } from 'swr';
 import {
   User, FileText, Briefcase, Tag, AlertTriangle,
   LogOut, Save, ChevronRight, Globe, DollarSign,
+  Camera, Download, Loader2, CheckCircle2, Eye, Lock,
+  Zap, Linkedin, Github, Link2, RefreshCw, Database, Mail, X, Plus, ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 import { TagInput } from '@/components/settings/TagInput';
-import { ResumeUpload, type ParsedResume } from '@/components/settings/ResumeUpload';
+import { UniversityAutocomplete } from '@/components/settings/UniversityAutocomplete';
+import { CompanyInput } from '@/components/settings/CompanyInput';
+import { ResumeUpload, type ParsedResume, type WorkEntry, type EducationEntry } from '@/components/settings/ResumeUpload';
 import { cn } from '@/lib/cn';
 
 interface UserProfile {
   userId: string;
   displayName: string | null;
-  country: string;
-  locations: string[];
-  roles: string[];
-  keywords: string[];
-  excludeKeywords: string[];
-  preferredRemote: boolean;
-  visaAuth: string;
-  jobCategories: string[];
-  employmentTypes: string[];
+  customAvatarUrl: string | null;
+  country: string | null;
+  locations: string[] | null;
+  roles: string[] | null;
+  keywords: string[] | null;
+  excludeKeywords: string[] | null;
+  preferredRemote: boolean | null;
+  visaAuth: string | null;
+  jobCategories: string[] | null;
+  employmentTypes: string[] | null;
   salaryMin: number | null;
   salaryMax: number | null;
+  dealBreakerFields: { employmentTypes: boolean; jobCategories: boolean; workplaceType: boolean } | null;
+  phone: string | null;
+  linkedinUrl: string | null;
+  githubUrl: string | null;
+  websiteUrl: string | null;
+  applyEmail: string | null;
+  quickApplyAll: boolean | null;
+  tier1QuickApply: boolean | null;
+  headline: string | null;
+  summary: string | null;
+  yearsOfExperience: number | null;
+  workExperience: WorkEntry[] | null;
+  education: EducationEntry[] | null;
+  earliestStartDate: string | null;
+  willingToRelocate: boolean | null;
+  preferredPronouns: string | null;
+  ethnicity: string | null;
+  veteranStatus: string | null;
+  disabilityStatus: string | null;
+}
+
+interface ResumeVersion {
+  id: string;
+  versionLabel: string;
+  mimeType: string;
+  fileSizeBytes: string | null;
+  createdAt: string;
+}
+
+interface Resume {
+  id: string;
+  label: string;
+  isDefault: boolean;
+  createdAt: string;
+  versions: ResumeVersion[];
 }
 
 interface MeResponse {
@@ -34,12 +74,24 @@ interface MeResponse {
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
-  profile: UserProfile | null;
+}
+
+interface DealBreakerFields {
+  employmentTypes: boolean;
+  jobCategories: boolean;
+  workplaceType: boolean;
 }
 
 interface FormState {
   displayName: string;
+  firstName: string;
+  lastName: string;
   phone: string;
+  linkedinUrl: string;
+  githubUrl: string;
+  websiteUrl: string;
+  applyEmail: string;
+  location: string;
   country: string;
   locations: string[];
   preferredRemote: boolean;
@@ -52,50 +104,150 @@ interface FormState {
   salaryPeriod: 'yearly' | 'hourly';
   keywords: string[];
   excludeKeywords: string[];
+  dealBreakerFields: DealBreakerFields;
+  quickApplyAll: boolean;
+  tier1QuickApply: boolean;
+  headline: string;
+  summary: string;
+  yearsOfExperience: string;
+  workExperience: WorkEntry[];
+  education: EducationEntry[];
+  earliestStartDate: string;
+  willingToRelocate: boolean;
+  preferredPronouns: string;
+  ethnicity: string;
+  veteranStatus: string;
+  disabilityStatus: string;
 }
 
-type TabId = 'profile' | 'resume' | 'preferences' | 'keywords' | 'danger';
+type TabId = 'profile' | 'appinfo' | 'resume' | 'preferences' | 'keywords' | 'quickapply' | 'data' | 'danger';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'profile',     label: 'Profile',       icon: <User className="h-4 w-4" /> },
+  { id: 'appinfo',     label: 'App Info',      icon: <ClipboardList className="h-4 w-4" /> },
   { id: 'resume',      label: 'Resume',        icon: <FileText className="h-4 w-4" /> },
   { id: 'preferences', label: 'Job Prefs',     icon: <Briefcase className="h-4 w-4" /> },
   { id: 'keywords',    label: 'Keywords',      icon: <Tag className="h-4 w-4" /> },
+  { id: 'quickapply',  label: 'Quick Apply',   icon: <Zap className="h-4 w-4" /> },
+  { id: 'data',        label: 'Data',          icon: <Database className="h-4 w-4" /> },
   { id: 'danger',      label: 'Danger Zone',   icon: <AlertTriangle className="h-4 w-4" /> },
 ];
 
 const KEY = '/api/profile';
+const ME_KEY = '/api/profile/me';
+
+const RESUMES_KEY = '/api/resumes';
 
 const DEFAULT_FORM: FormState = {
   displayName: '',
+  firstName: '',
+  lastName: '',
   phone: '',
+  linkedinUrl: '',
+  githubUrl: '',
+  websiteUrl: '',
+  applyEmail: '',
+  location: '',
   country: 'CA',
   locations: [],
   preferredRemote: false,
   visaAuth: 'citizen',
   roles: [],
-  jobCategories: ['software'],
-  employmentTypes: ['full_time'],
+  jobCategories: [],
+  employmentTypes: [],
   salaryMin: '',
   salaryMax: '',
   salaryPeriod: 'yearly',
   keywords: [],
   excludeKeywords: [],
+  dealBreakerFields: { employmentTypes: false, jobCategories: false, workplaceType: false },
+  quickApplyAll: true,
+  tier1QuickApply: false,
+  headline: '',
+  summary: '',
+  yearsOfExperience: '',
+  workExperience: [],
+  education: [],
+  earliestStartDate: '',
+  willingToRelocate: false,
+  preferredPronouns: '',
+  ethnicity: '',
+  veteranStatus: '',
+  disabilityStatus: '',
 };
 
+// ─── Confirm Modal ───────────────────────────────────────────────────────────
+
+interface ConfirmModalProps {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function ConfirmModal({ open, title, message, confirmLabel = 'Overwrite', cancelLabel = 'Keep existing', onConfirm, onCancel }: ConfirmModalProps) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative z-10 w-full max-w-md mx-4 rounded-2xl border border-border bg-card shadow-2xl p-6 space-y-4">
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">{message}</p>
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-border bg-background hover:bg-accent transition-colors"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
-  const { data, isLoading } = useSWR<MeResponse>(KEY, (url: string) => api.get<MeResponse>(url));
+  const { data: profile, isLoading } = useSWR<UserProfile | null>(KEY, (url: string) => api.get<UserProfile | null>(url));
+  const { data: me } = useSWR<MeResponse>(ME_KEY, (url: string) => api.get<MeResponse>(url));
+  const { data: resumes, mutate: mutateResumes } = useSWR<Resume[]>(RESUMES_KEY, (url: string) => api.get<Resume[]>(url));
   const [saving, setSaving] = React.useState(false);
+  const [avatarUploading, setAvatarUploading] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<TabId>('profile');
   const [form, setForm] = React.useState<FormState>(DEFAULT_FORM);
   const [resumeFromFields, setResumeFromFields] = React.useState<string[]>([]);
+  const [resumeUploadKey, setResumeUploadKey] = React.useState(0);
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
+  const [confirmModal, setConfirmModal] = React.useState<{ open: boolean; title: string; message: string; resolve: (v: boolean) => void } | null>(null);
+
+  function showConfirm(title: string, message: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      setConfirmModal({ open: true, title, message, resolve });
+    });
+  }
 
   React.useEffect(() => {
-    if (!data?.profile) return;
-    const p = data.profile;
+    if (!profile) return;
+    const p = profile;
     setForm((prev) => ({
       ...prev,
       displayName: p.displayName ?? '',
+      firstName: p.displayName ? (p.displayName.split(' ')[0] ?? '') : '',
+      lastName: p.displayName ? (p.displayName.split(' ').slice(1).join(' ') ?? '') : '',
+      phone: p.phone ?? '',
+      location: (p.locations ?? [])[0] ?? '',
+      linkedinUrl: p.linkedinUrl ?? '',
+      githubUrl: p.githubUrl ?? '',
+      websiteUrl: p.websiteUrl ?? '',
+      applyEmail: p.applyEmail ?? '',
       country: p.country ?? 'CA',
       locations: p.locations ?? [],
       preferredRemote: p.preferredRemote ?? false,
@@ -107,36 +259,150 @@ export default function SettingsPage() {
       salaryMax: p.salaryMax != null ? String(p.salaryMax) : '',
       keywords: p.keywords ?? [],
       excludeKeywords: p.excludeKeywords ?? [],
+      dealBreakerFields: p.dealBreakerFields ?? { employmentTypes: false, jobCategories: false, workplaceType: false },
+      quickApplyAll: p.quickApplyAll ?? true,
+      tier1QuickApply: p.tier1QuickApply ?? false,
+      headline: p.headline ?? '',
+      summary: p.summary ?? '',
+      yearsOfExperience: p.yearsOfExperience != null ? String(p.yearsOfExperience) : '',
+      workExperience: p.workExperience ?? [],
+      education: p.education ?? [],
+      earliestStartDate: p.earliestStartDate ?? '',
+      willingToRelocate: p.willingToRelocate ?? false,
+      preferredPronouns: p.preferredPronouns ?? '',
+      ethnicity: p.ethnicity ?? '',
+      veteranStatus: p.veteranStatus ?? '',
+      disabilityStatus: p.disabilityStatus ?? '',
     }));
-  }, [data]);
+  }, [profile]);
 
-  function handleParsedResume(parsed: ParsedResume) {
+  /** Formats a phone number string to +1 (416) 555-1234 style */
+  function formatPhone(v: string): string {
+    const digits = v.replace(/\D/g, '');
+    if (digits.length === 11 && digits[0] === '1') {
+      const d = digits.slice(1);
+      return `+1 (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+    }
+    if (digits.length === 10) {
+      return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+    if (digits.length >= 7) {
+      const d = digits.slice(-10);
+      return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+    }
+    return v;
+  }
+
+  /** Returns s if it's a valid absolute URL, otherwise null */
+  function validUrl(s: string | undefined | null): string | null {
+    if (!s) return null;
+    try { new URL(s); return s; } catch { return null; }
+  }
+
+  /** Returns s if it looks like a valid email, otherwise null */
+  function validEmail(s: string | undefined | null): string | null {
+    if (!s) return null;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) ? s : null;
+  }
+
+  async function handleParsedResume(parsed: ParsedResume) {
     const touched: string[] = [];
-    setForm((prev) => {
-      const next = { ...prev };
-      if (parsed.displayName && !prev.displayName) {
-        next.displayName = parsed.displayName;
-        touched.push('displayName');
-      }
-      if (parsed.roles?.length) {
-        const merged = [...new Set([...prev.roles, ...parsed.roles])];
-        next.roles = merged;
-        parsed.roles.forEach((r) => touched.push(r));
-      }
-      if (parsed.keywords?.length) {
-        const merged = [...new Set([...prev.keywords, ...parsed.keywords])];
-        next.keywords = merged;
-        parsed.keywords.forEach((k) => touched.push(k));
-      }
-      if (parsed.locations?.length) {
-        const merged = [...new Set([...prev.locations, ...parsed.locations])];
-        next.locations = merged;
-        parsed.locations.forEach((l) => touched.push(l));
-      }
-      return next;
-    });
+    const prev = form;
+
+    // Determine which fields would be overwritten (already have a value)
+    const willOverwrite: string[] = [];
+    if (parsed.firstName && prev.firstName) willOverwrite.push('First name');
+    if (parsed.lastName && prev.lastName) willOverwrite.push('Last name');
+    if (parsed.email && prev.applyEmail) willOverwrite.push('Email');
+    if (parsed.phone && prev.phone) willOverwrite.push('Phone');
+    if (parsed.linkedinUrl && prev.linkedinUrl) willOverwrite.push('LinkedIn');
+    if (parsed.githubUrl && prev.githubUrl) willOverwrite.push('GitHub');
+    if (parsed.websiteUrl && prev.websiteUrl) willOverwrite.push('Website');
+    if (parsed.workExperience?.length && prev.workExperience.length) willOverwrite.push('Work experience');
+    if (parsed.education?.length && prev.education.length) willOverwrite.push('Education');
+
+    let overwrite = true;
+    if (willOverwrite.length > 0) {
+      overwrite = await showConfirm(
+        'Resume data found',
+        `Your resume has updated info for: ${willOverwrite.join(', ')}.\n\nOverwrite existing data with resume data?`
+      );
+    }
+
+    const next: FormState = { ...prev };
+
+    const shouldFill = (field: string) => overwrite || !willOverwrite.includes(field);
+
+    if (parsed.firstName && shouldFill('First name')) { next.firstName = parsed.firstName; touched.push('firstName'); }
+    if (parsed.lastName && shouldFill('Last name')) { next.lastName = parsed.lastName; touched.push('lastName'); }
+    if (parsed.firstName || parsed.lastName) {
+      next.displayName = [next.firstName, next.lastName].filter(Boolean).join(' ');
+      touched.push('displayName');
+    }
+    if (parsed.location) { next.location = parsed.location; touched.push('location'); }
+    if (parsed.email && shouldFill('Email')) { next.applyEmail = parsed.email; touched.push('applyEmail'); }
+    if (parsed.phone && shouldFill('Phone')) { next.phone = parsed.phone; touched.push('phone'); }
+    if (parsed.linkedinUrl && shouldFill('LinkedIn')) { next.linkedinUrl = parsed.linkedinUrl; touched.push('linkedinUrl'); }
+    if (parsed.githubUrl && shouldFill('GitHub')) { next.githubUrl = parsed.githubUrl; touched.push('githubUrl'); }
+    if (parsed.websiteUrl && shouldFill('Website')) { next.websiteUrl = parsed.websiteUrl; touched.push('websiteUrl'); }
+    if (parsed.headline) { next.headline = parsed.headline; touched.push('headline'); }
+    if (parsed.summary) { next.summary = parsed.summary; touched.push('summary'); }
+    if (parsed.yearsOfExperience != null) { next.yearsOfExperience = String(parsed.yearsOfExperience); touched.push('yearsOfExperience'); }
+    if (parsed.workExperience?.length && shouldFill('Work experience')) { next.workExperience = parsed.workExperience; touched.push('workExperience'); }
+    if (parsed.education?.length && shouldFill('Education')) { next.education = parsed.education; touched.push('education'); }
+    if (parsed.roles?.length) {
+      next.roles = [...new Set([...prev.roles, ...parsed.roles])];
+      touched.push('roles');
+    }
+    if (parsed.keywords?.length) {
+      next.keywords = [...new Set([...prev.keywords, ...parsed.keywords])];
+      touched.push('keywords');
+    }
+    if (parsed.locations?.length) {
+      next.locations = [...new Set([...prev.locations, ...parsed.locations])];
+      touched.push('locations');
+    }
+
+    setForm(next);
     setResumeFromFields(touched);
-    toast({ title: 'Resume parsed', description: 'Fields have been pre-filled from your resume.' });
+    toast({ title: 'Resume parsed', description: 'Fields have been pre-filled — saving automatically…' });
+
+    // Auto-save immediately so DB is updated without requiring manual Save click
+    const clean = (arr: string[]) => [...new Set(arr.filter((s) => s.trim().length > 0))];
+    try {
+      const loc = parsed.location?.trim();
+      const allLocations = clean(loc ? [loc, ...next.locations] : next.locations);
+      const payload = {
+        displayName: next.displayName || null,
+        phone: next.phone || null,
+        linkedinUrl: validUrl(next.linkedinUrl),
+        githubUrl: validUrl(next.githubUrl),
+        websiteUrl: validUrl(next.websiteUrl),
+        applyEmail: validEmail(next.applyEmail) ?? validEmail(me?.email) ?? null,
+        locations: allLocations,
+        roles: clean(next.roles),
+        keywords: clean(next.keywords),
+        headline: next.headline || null,
+        summary: next.summary || null,
+        yearsOfExperience: next.yearsOfExperience ? Number(next.yearsOfExperience) : null,
+        workExperience: next.workExperience.map((e) => ({ ...e, description: (e.description ?? '').slice(0, 950) })),
+        education: next.education.map((e) => ({ ...e, institution: (e.institution ?? '').slice(0, 190), degree: (e.degree ?? '').slice(0, 190), field: (e.field ?? '').slice(0, 190) })),
+        preferredPronouns: next.preferredPronouns || null,
+        ethnicity: next.ethnicity || null,
+        veteranStatus: next.veteranStatus || null,
+        disabilityStatus: next.disabilityStatus || null,
+      };
+      console.log('[auto-save] payload:', JSON.stringify(payload, null, 2));
+      await api.put(KEY, payload);
+      await mutate(KEY);
+      toast({ title: 'Profile updated', description: 'Resume data saved to your profile.' });
+    } catch (err) {
+      const msg = (err != null && typeof err === 'object' && 'message' in err)
+        ? String((err as { message: unknown }).message)
+        : String(err);
+      console.error('[auto-save] failed:', err);
+      toast({ title: 'Auto-save failed', description: msg, variant: 'destructive' });
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -144,9 +410,14 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await api.put(KEY, {
-        displayName: form.displayName || null,
+        displayName: [form.firstName, form.lastName].filter(Boolean).join(' ') || form.displayName || null,
+        phone: form.phone || null,
+        linkedinUrl: validUrl(form.linkedinUrl),
+        githubUrl: validUrl(form.githubUrl),
+        websiteUrl: validUrl(form.websiteUrl),
+        applyEmail: validEmail(form.applyEmail) ?? validEmail(me?.email) ?? null,
         country: form.country,
-        locations: form.locations,
+        locations: form.location ? [...new Set([form.location, ...form.locations])] : form.locations,
         preferredRemote: form.preferredRemote,
         visaAuth: form.visaAuth,
         roles: form.roles,
@@ -156,13 +427,64 @@ export default function SettingsPage() {
         salaryMax: form.salaryMax ? Number(form.salaryMax) : null,
         keywords: form.keywords,
         excludeKeywords: form.excludeKeywords,
+        dealBreakerFields: form.dealBreakerFields,
+        quickApplyAll: form.quickApplyAll,
+        tier1QuickApply: form.tier1QuickApply,
+        headline: form.headline || null,
+        summary: form.summary || null,
+        yearsOfExperience: form.yearsOfExperience ? Number(form.yearsOfExperience) : null,
+        workExperience: form.workExperience.map((e) => ({ ...e, description: (e.description ?? '').slice(0, 950) })),
+        education: form.education.map((e) => ({ ...e, institution: (e.institution ?? '').slice(0, 190), degree: (e.degree ?? '').slice(0, 190), field: (e.field ?? '').slice(0, 190) })),
+        earliestStartDate: form.earliestStartDate || null,
+        willingToRelocate: form.willingToRelocate,
+        preferredPronouns: form.preferredPronouns || null,
+        ethnicity: form.ethnicity || null,
+        veteranStatus: form.veteranStatus || null,
+        disabilityStatus: form.disabilityStatus || null,
       });
       await mutate(KEY);
       toast({ title: 'Profile saved' });
-    } catch {
-      toast({ title: 'Failed to save', variant: 'destructive' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[handleSave] failed:', msg, err);
+      toast({ title: 'Failed to save', description: msg, variant: 'destructive' });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/profile/avatar', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('Upload failed');
+      await mutate(KEY);
+      toast({ title: 'Profile picture updated' });
+    } catch {
+      toast({ title: 'Failed to upload picture', variant: 'destructive' });
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
+  async function handleDownloadResume(resumeId: string, versionId: string, view = false) {
+    try {
+      const { downloadUrl } = await api.get<{ downloadUrl: string }>(`/api/resumes/${resumeId}/versions/${versionId}/download`);
+      if (view) {
+        window.open(downloadUrl, '_blank');
+      } else {
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = '';
+        a.click();
+      }
+    } catch {
+      toast({ title: 'Failed to get download link', variant: 'destructive' });
     }
   }
 
@@ -175,7 +497,10 @@ export default function SettingsPage() {
     }
   }
 
-  const avatarChar = (data?.name ?? data?.email ?? 'U').charAt(0).toUpperCase();
+  const avatarChar = (me?.name ?? me?.email ?? 'U').charAt(0).toUpperCase();
+  const avatarUrl = profile?.customAvatarUrl ?? me?.avatarUrl ?? null;
+  const defaultResume = resumes?.find((r) => r.isDefault) ?? resumes?.[0] ?? null;
+  const defaultVersion = defaultResume?.versions[defaultResume.versions.length - 1] ?? null;
 
   if (isLoading) {
     return (
@@ -196,6 +521,15 @@ export default function SettingsPage() {
 
   return (
     <div className="flex h-full min-h-0">
+      {confirmModal && (
+        <ConfirmModal
+          open={confirmModal.open}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          onConfirm={() => { setConfirmModal(null); confirmModal.resolve(true); }}
+          onCancel={() => { setConfirmModal(null); confirmModal.resolve(false); }}
+        />
+      )}
       {/* ── Sidebar nav ── */}
       <aside className="w-52 shrink-0 border-r border-border flex flex-col py-6 px-3 gap-1">
         {/* User identity */}
@@ -204,8 +538,8 @@ export default function SettingsPage() {
             {avatarChar}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium truncate">{data?.name ?? 'You'}</p>
-            <p className="text-[11px] text-muted-foreground truncate">{data?.email ?? ''}</p>
+            <p className="text-sm font-medium truncate">{me?.name ?? 'You'}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{me?.email ?? ''}</p>
           </div>
         </div>
 
@@ -252,13 +586,35 @@ export default function SettingsPage() {
             {activeTab === 'profile' && (
               <Section title="Profile" description="How you appear and your work authorization status.">
                 <div className="flex items-center gap-4 mb-6 p-4 rounded-xl bg-muted/50 border border-border">
-                  <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold shrink-0">
-                    {avatarChar}
-                  </div>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="sr-only"
+                    onChange={handleAvatarUpload}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={avatarUploading}
+                    className="relative h-16 w-16 rounded-full shrink-0 group focus:outline-none"
+                  >
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="avatar" className="h-16 w-16 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold">
+                        {avatarChar}
+                      </div>
+                    )}
+                    <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      {avatarUploading
+                        ? <Loader2 className="h-5 w-5 text-white animate-spin" />
+                        : <Camera className="h-5 w-5 text-white" />}
+                    </div>
+                  </button>
                   <div>
-                    <p className="font-semibold">{data?.name ?? 'Anonymous'}</p>
-                    <p className="text-sm text-muted-foreground">{data?.email ?? 'No email on file'}</p>
-                    <p className="text-xs text-muted-foreground mt-1 italic">Avatar is set by your OAuth provider</p>
+                    <p className="font-semibold">{me?.name ?? 'Anonymous'}</p>
+                    <p className="text-sm text-muted-foreground">{me?.email ?? 'No email on file'}</p>
                   </div>
                 </div>
 
@@ -272,12 +628,48 @@ export default function SettingsPage() {
                   />
                 </FieldRow>
 
+                <FieldRow label="Apply email" hint="Email used on job applications — defaults to your login email">
+                  <TextInput
+                    value={form.applyEmail}
+                    onChange={(v) => setForm({ ...form, applyEmail: v })}
+                    placeholder={me?.email ?? 'your@email.com'}
+                    icon={<Mail className="h-4 w-4" />}
+                  />
+                </FieldRow>
+
                 <FieldRow label="Phone number" hint="Optional — for autofill on application forms">
                   <TextInput
                     value={form.phone}
-                    onChange={(v) => setForm({ ...form, phone: v })}
+                    onChange={(v) => setForm({ ...form, phone: formatPhone(v) })}
                     placeholder="+1 (416) 555-0100"
                     type="tel"
+                  />
+                </FieldRow>
+
+                <FieldRow label="LinkedIn URL" hint="Used in autofill profiles">
+                  <TextInput
+                    value={form.linkedinUrl}
+                    onChange={(v) => setForm({ ...form, linkedinUrl: v })}
+                    placeholder="https://linkedin.com/in/yourname"
+                    icon={<Linkedin className="h-4 w-4" />}
+                  />
+                </FieldRow>
+
+                <FieldRow label="GitHub URL" hint="Used in autofill profiles">
+                  <TextInput
+                    value={form.githubUrl}
+                    onChange={(v) => setForm({ ...form, githubUrl: v })}
+                    placeholder="https://github.com/yourname"
+                    icon={<Github className="h-4 w-4" />}
+                  />
+                </FieldRow>
+
+                <FieldRow label="Website / Portfolio" hint="Used in autofill profiles">
+                  <TextInput
+                    value={form.websiteUrl}
+                    onChange={(v) => setForm({ ...form, websiteUrl: v })}
+                    placeholder="https://yoursite.com"
+                    icon={<Link2 className="h-4 w-4" />}
                   />
                 </FieldRow>
 
@@ -314,19 +706,251 @@ export default function SettingsPage() {
               </Section>
             )}
 
+            {/* ── Application Info tab ── */}
+            {activeTab === 'appinfo' && (
+              <Section title="Application Info" description="Autofilled from your resume. Used to fill out job applications instantly.">
+
+                {/* ── Personal info ── */}
+                <div className="grid grid-cols-2 gap-4">
+                  <FieldRow label="First name">
+                    <TextInput
+                      value={form.firstName}
+                      onChange={(v) => setForm({ ...form, firstName: v })}
+                      placeholder="Jane"
+                      highlighted={resumeFromFields.includes('firstName')}
+                    />
+                  </FieldRow>
+                  <FieldRow label="Last name">
+                    <TextInput
+                      value={form.lastName}
+                      onChange={(v) => setForm({ ...form, lastName: v })}
+                      placeholder="Smith"
+                      highlighted={resumeFromFields.includes('lastName')}
+                    />
+                  </FieldRow>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FieldRow label="Email">
+                    <TextInput
+                      value={form.applyEmail}
+                      onChange={(v) => setForm({ ...form, applyEmail: v })}
+                      placeholder="jane@example.com"
+                      icon={<Mail className="h-4 w-4" />}
+                      highlighted={resumeFromFields.includes('applyEmail')}
+                    />
+                  </FieldRow>
+                  <FieldRow label="Phone number">
+                    <TextInput
+                      value={form.phone}
+                      onChange={(v) => setForm({ ...form, phone: formatPhone(v) })}
+                      placeholder="+1 (416) 555-0100"
+                      highlighted={resumeFromFields.includes('phone')}
+                    />
+                  </FieldRow>
+                </div>
+
+                <FieldRow label="Location" hint="City, Province / State">
+                  <TextInput
+                    value={form.location}
+                    onChange={(v) => setForm({ ...form, location: v })}
+                    placeholder="Toronto, ON"
+                    icon={<Globe className="h-4 w-4" />}
+                    highlighted={resumeFromFields.includes('location')}
+                  />
+                </FieldRow>
+
+                {/* ── Online presence ── */}
+                <div className="pt-2 border-t border-border">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Online</p>
+                  <div className="space-y-4">
+                    <FieldRow label="LinkedIn">
+                      <TextInput
+                        value={form.linkedinUrl}
+                        onChange={(v) => setForm({ ...form, linkedinUrl: v })}
+                        placeholder="https://linkedin.com/in/janesmith"
+                        icon={<Linkedin className="h-4 w-4" />}
+                        highlighted={resumeFromFields.includes('linkedinUrl')}
+                      />
+                    </FieldRow>
+                    <FieldRow label="GitHub">
+                      <TextInput
+                        value={form.githubUrl}
+                        onChange={(v) => setForm({ ...form, githubUrl: v })}
+                        placeholder="https://github.com/janesmith"
+                        icon={<Github className="h-4 w-4" />}
+                        highlighted={resumeFromFields.includes('githubUrl')}
+                      />
+                    </FieldRow>
+                    <FieldRow label="Website / Portfolio">
+                      <TextInput
+                        value={form.websiteUrl}
+                        onChange={(v) => setForm({ ...form, websiteUrl: v })}
+                        placeholder="https://janesmith.dev"
+                        icon={<Link2 className="h-4 w-4" />}
+                        highlighted={resumeFromFields.includes('websiteUrl')}
+                      />
+                    </FieldRow>
+                  </div>
+                </div>
+
+                {/* ── Work experience ── */}
+                <div className="pt-2 border-t border-border">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Work Experience</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Auto-filled from resume · edit any entry below</p>
+                    </div>
+                  </div>
+                  <WorkExperienceEditor
+                    entries={form.workExperience}
+                    fromResume={resumeFromFields.includes('workExperience')}
+                    onChange={(entries) => setForm({ ...form, workExperience: entries })}
+                  />
+                </div>
+
+                {/* ── Education ── */}
+                <div className="pt-2 border-t border-border">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Education</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Auto-filled from resume · edit any entry below</p>
+                    </div>
+                  </div>
+                  <EducationEditor
+                    entries={form.education}
+                    fromResume={resumeFromFields.includes('education')}
+                    onChange={(entries) => setForm({ ...form, education: entries })}
+                  />
+                </div>
+
+                {/* ── DEI ── */}
+                <div className="pt-2 border-t border-border">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Diversity &amp; Inclusion</p>
+                  <p className="text-xs text-muted-foreground mb-4">Optional — only used to autofill DEI questions on applications.</p>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <FieldRow label="Gender identity">
+                      <select
+                        value={form.preferredPronouns}
+                        onChange={(e) => setForm({ ...form, preferredPronouns: e.target.value })}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
+                      >
+                        <option value="">Prefer not to say</option>
+                        <option value="man">Man</option>
+                        <option value="woman">Woman</option>
+                        <option value="non_binary">Non-binary</option>
+                        <option value="other">Self-describe / Other</option>
+                      </select>
+                    </FieldRow>
+
+                    <FieldRow label="Race / Ethnicity">
+                      <select
+                        value={form.ethnicity}
+                        onChange={(e) => setForm({ ...form, ethnicity: e.target.value })}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
+                      >
+                        <option value="">Prefer not to say</option>
+                        <option value="asian">Asian</option>
+                        <option value="black">Black or African American</option>
+                        <option value="hispanic">Hispanic or Latino</option>
+                        <option value="middle_eastern">Middle Eastern or North African</option>
+                        <option value="native_american">Native American or Alaska Native</option>
+                        <option value="pacific_islander">Native Hawaiian or Pacific Islander</option>
+                        <option value="white">White</option>
+                        <option value="two_or_more">Two or more races</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </FieldRow>
+
+                    <FieldRow label="Veteran status">
+                      <select
+                        value={form.veteranStatus}
+                        onChange={(e) => setForm({ ...form, veteranStatus: e.target.value })}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
+                      >
+                        <option value="">Prefer not to say</option>
+                        <option value="not_veteran">I am not a protected veteran</option>
+                        <option value="veteran">I identify as a protected veteran</option>
+                      </select>
+                    </FieldRow>
+
+                    <FieldRow label="Disability status">
+                      <select
+                        value={form.disabilityStatus}
+                        onChange={(e) => setForm({ ...form, disabilityStatus: e.target.value })}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
+                      >
+                        <option value="">Prefer not to say</option>
+                        <option value="no">No, I don&apos;t have a disability</option>
+                        <option value="yes">Yes, I have a disability</option>
+                      </select>
+                    </FieldRow>
+                  </div>
+                </div>
+
+                <SaveBar saving={saving} />
+              </Section>
+            )}
+
             {/* ── Resume tab ── */}
             {activeTab === 'resume' && (
               <Section title="Resume" description="Upload your resume and we'll auto-fill your profile fields.">
-                <ResumeUpload onParsed={handleParsedResume} />
+                {defaultResume && defaultVersion ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 rounded-xl border border-success/30 bg-success/8 px-4 py-3.5">
+                      <CheckCircle2 className="h-5 w-5 text-success flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">{defaultResume.label}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Uploaded {new Date(defaultVersion.createdAt).toLocaleDateString()}
+                          {defaultVersion.fileSizeBytes ? ` · ${(Number(defaultVersion.fileSizeBytes) / 1024).toFixed(0)} KB` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadResume(defaultResume.id, defaultVersion.id, true)}
+                          className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          View
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadResume(defaultResume.id, defaultVersion.id, false)}
+                          className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Download
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground px-1">Want to replace it? Upload a new one below.</p>
+                    <ResumeUpload key={resumeUploadKey} onParsed={(parsed) => { handleParsedResume(parsed); mutateResumes(); setResumeUploadKey((k) => k + 1); }} />
+                  </div>
+                ) : (
+                  <ResumeUpload key={resumeUploadKey} onParsed={(parsed) => { handleParsedResume(parsed); mutateResumes(); setResumeUploadKey((k) => k + 1); }} />
+                )}
 
                 <div className="mt-6 rounded-xl border border-border bg-muted/30 p-4">
-                  <p className="text-sm font-medium mb-1">What gets auto-filled?</p>
-                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-                    <li>Your name → Display name</li>
-                    <li>Job titles &amp; roles → Target roles</li>
-                    <li>Skills &amp; technologies → Keywords</li>
-                    <li>Cities &amp; regions → Preferred locations</li>
-                  </ul>
+                  <p className="text-sm font-medium mb-2">What gets auto-filled?</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                    <span>✓ Name → Display name</span>
+                    <span>✓ Email → Apply email</span>
+                    <span>✓ Phone number</span>
+                    <span>✓ LinkedIn URL</span>
+                    <span>✓ GitHub URL</span>
+                    <span>✓ Website / Portfolio</span>
+                    <span>✓ Professional headline</span>
+                    <span>✓ Professional summary</span>
+                    <span>✓ Years of experience</span>
+                    <span>✓ Work experience entries</span>
+                    <span>✓ Education entries</span>
+                    <span>✓ Job titles &amp; roles</span>
+                    <span>✓ Skills &amp; technologies</span>
+                    <span>✓ Cities &amp; locations</span>
+                  </div>
                   <p className="text-xs text-muted-foreground mt-3">
                     Pre-filled fields are marked with an <span className="font-semibold text-primary">AI</span> badge. You can edit or remove them at any time.
                   </p>
@@ -377,7 +1001,23 @@ export default function SettingsPage() {
                   </div>
                 </FieldRow>
 
-                <FieldRow label="Employment types" hint="Select all that apply">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-sm font-medium text-foreground">Employment types</label>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, dealBreakerFields: { ...form.dealBreakerFields, employmentTypes: !form.dealBreakerFields.employmentTypes } })}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all border',
+                        form.dealBreakerFields.employmentTypes
+                          ? 'bg-destructive/10 border-destructive/30 text-destructive'
+                          : 'bg-muted border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground',
+                      )}
+                    >
+                      <Lock className="h-2.5 w-2.5" />
+                      {form.dealBreakerFields.employmentTypes ? 'Deal breaker' : 'Must match?'}
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {([
                       { id: 'full_time', label: 'Full-time' },
@@ -409,9 +1049,28 @@ export default function SettingsPage() {
                       );
                     })}
                   </div>
-                </FieldRow>
+                  {form.dealBreakerFields.employmentTypes && (
+                    <p className="text-[11px] text-destructive/80">Only jobs matching these types will appear in your feed.</p>
+                  )}
+                </div>
 
-                <FieldRow label="Job categories" hint="Types of roles to include in your feed">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-sm font-medium text-foreground">Job categories</label>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, dealBreakerFields: { ...form.dealBreakerFields, jobCategories: !form.dealBreakerFields.jobCategories } })}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all border',
+                        form.dealBreakerFields.jobCategories
+                          ? 'bg-destructive/10 border-destructive/30 text-destructive'
+                          : 'bg-muted border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground',
+                      )}
+                    >
+                      <Lock className="h-2.5 w-2.5" />
+                      {form.dealBreakerFields.jobCategories ? 'Deal breaker' : 'Must match?'}
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {([
                       { id: 'software', label: 'Software' },
@@ -446,7 +1105,10 @@ export default function SettingsPage() {
                       );
                     })}
                   </div>
-                </FieldRow>
+                  {form.dealBreakerFields.jobCategories && (
+                    <p className="text-[11px] text-destructive/80">Only jobs in these categories will appear in your feed.</p>
+                  )}
+                </div>
 
                 <FieldRow label="Salary range" hint="Jobs below this range are scored lower">
                   <div className="space-y-2">
@@ -539,6 +1201,44 @@ export default function SettingsPage() {
               </Section>
             )}
 
+            {/* ── Quick Apply tab ── */}
+            {activeTab === 'quickapply' && (
+              <Section title="Quick Apply" description="Control how the extension auto-applies to jobs on your behalf.">
+                <ToggleRow
+                  label="Autofill All"
+                  hint="When on, Quick Apply will automatically fill and submit applications for all ATS types. Turn off individual ATS types in Autofill Profiles."
+                  checked={form.quickApplyAll}
+                  onChange={(v) => setForm({ ...form, quickApplyAll: v })}
+                />
+
+                <ToggleRow
+                  label="Tier 1 Companies"
+                  hint="Allow Quick Apply for top-tier companies (Google, Meta, Amazon, etc). Off by default — enable only if you want fully automated applies to these companies."
+                  checked={form.tier1QuickApply}
+                  onChange={(v) => setForm({ ...form, tier1QuickApply: v })}
+                  cautionWhenOn
+                />
+
+                <div className="rounded-xl border border-border bg-muted/30 p-4">
+                  <p className="text-sm font-medium mb-1">How Quick Apply works</p>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    <li>Click Quick Apply on any job → extension fills the form automatically</li>
+                    <li>A cover letter is generated using your profile and the job description</li>
+                    <li>If all required fields are filled, the form is submitted automatically</li>
+                    <li>Unfilled required fields are saved to Autofill Profiles for you to answer</li>
+                    <li>Any errors are reported in Notifications</li>
+                  </ul>
+                </div>
+
+                <SaveBar saving={saving} />
+              </Section>
+            )}
+
+            {/* ── Data tab ── */}
+            {activeTab === 'data' && (
+              <DataSection />
+            )}
+
             {/* ── Danger Zone tab ── */}
             {activeTab === 'danger' && (
               <Section title="Danger Zone" description="Irreversible actions — proceed with caution.">
@@ -581,6 +1281,171 @@ export default function SettingsPage() {
 }
 
 /* ─── Sub-components ─────────────────────────────────────────── */
+
+const BLANK_WORK: WorkEntry = { company: '', title: '', startDate: '', endDate: '', description: '' };
+const BLANK_EDU: EducationEntry = { institution: '', degree: '', field: '', startYear: '', endYear: '' };
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: CURRENT_YEAR - 1969 }, (_, i) => CURRENT_YEAR - i);
+
+function MonthYearPicker({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const parts = value ? value.split(' ') : [];
+  const month = parts[0] && MONTHS.includes(parts[0]) ? parts[0] : '';
+  const year = parts[1] ?? '';
+
+  function handleMonth(m: string) {
+    const y = year || '';
+    onChange(m && y ? `${m} ${y}` : m || y || '');
+  }
+  function handleYear(y: string) {
+    const m = month || '';
+    onChange(m && y ? `${m} ${y}` : m || y || '');
+  }
+
+  const selectCls = 'rounded-lg border border-input bg-background px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors appearance-none cursor-pointer';
+
+  return (
+    <div className="flex gap-1.5">
+      <select value={month} onChange={(e) => handleMonth(e.target.value)} className={cn(selectCls, 'flex-1')}>
+        <option value="">Month</option>
+        {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+      </select>
+      <select value={year} onChange={(e) => handleYear(e.target.value)} className={cn(selectCls, 'w-24')}>
+        <option value="">{placeholder ?? 'Year'}</option>
+        {YEARS.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function WorkExperienceEditor({
+  entries, fromResume, onChange,
+}: { entries: WorkEntry[]; fromResume: boolean; onChange: (e: WorkEntry[]) => void }) {
+  function update(i: number, field: keyof WorkEntry, val: string) {
+    const next = entries.map((e, idx) => idx === i ? { ...e, [field]: val } : e);
+    onChange(next);
+  }
+  function remove(i: number) { onChange(entries.filter((_, idx) => idx !== i)); }
+  function add() { onChange([...entries, { ...BLANK_WORK }]); }
+
+  return (
+    <div className="space-y-3">
+      {entries.length === 0 && (
+        <p className="text-sm text-muted-foreground italic">No work experience yet — upload a resume or add manually.</p>
+      )}
+      {entries.map((e, i) => {
+        const isCurrent = e.endDate === 'Present';
+        return (
+          <div key={i} className={cn('rounded-xl border p-4 space-y-3', fromResume && i === 0 ? 'border-primary/40 bg-primary/5' : 'border-border bg-card')}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">{e.title || e.company || `Entry ${i + 1}`}</p>
+              <button type="button" onClick={() => remove(i)} className="rounded-md p-1 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Job title</label>
+                <input value={e.title} onChange={(ev) => update(i, 'title', ev.target.value)} placeholder="Software Engineer" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Company</label>
+                <CompanyInput value={e.company} onChange={(val) => update(i, 'company', val)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Start date</label>
+                <MonthYearPicker value={e.startDate} onChange={(v) => update(i, 'startDate', v)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">End date</label>
+                {isCurrent ? (
+                  <div className="flex items-center h-[38px] px-3 rounded-lg border border-input bg-background text-sm text-muted-foreground">
+                    Present
+                  </div>
+                ) : (
+                  <MonthYearPicker value={e.endDate} onChange={(v) => update(i, 'endDate', v)} />
+                )}
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isCurrent}
+                onChange={(ev) => update(i, 'endDate', ev.target.checked ? 'Present' : '')}
+                className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+              />
+              <span className="text-xs text-muted-foreground">I currently work here</span>
+            </label>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Description</label>
+              <textarea value={e.description} onChange={(ev) => update(i, 'description', ev.target.value)} placeholder="Key responsibilities and achievements…" rows={2} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors resize-none" />
+            </div>
+          </div>
+        );
+      })}
+      <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors w-full justify-center">
+        <Plus className="h-3.5 w-3.5" />
+        Add work experience
+      </button>
+    </div>
+  );
+}
+
+function EducationEditor({
+  entries, fromResume, onChange,
+}: { entries: EducationEntry[]; fromResume: boolean; onChange: (e: EducationEntry[]) => void }) {
+  function update(i: number, field: keyof EducationEntry, val: string) {
+    const next = entries.map((e, idx) => idx === i ? { ...e, [field]: val } : e);
+    onChange(next);
+  }
+  function remove(i: number) { onChange(entries.filter((_, idx) => idx !== i)); }
+  function add() { onChange([...entries, { ...BLANK_EDU }]); }
+
+  return (
+    <div className="space-y-3">
+      {entries.length === 0 && (
+        <p className="text-sm text-muted-foreground italic">No education yet — upload a resume or add manually.</p>
+      )}
+      {entries.map((e, i) => (
+        <div key={i} className={cn('rounded-xl border p-4 space-y-3', fromResume && i === 0 ? 'border-primary/40 bg-primary/5' : 'border-border bg-card')}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">{e.institution || `Entry ${i + 1}`}</p>
+            <button type="button" onClick={() => remove(i)} className="rounded-md p-1 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2 space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Institution</label>
+              <UniversityAutocomplete value={e.institution} onChange={(val) => update(i, 'institution', val)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Degree</label>
+              <input value={e.degree} onChange={(ev) => update(i, 'degree', ev.target.value)} placeholder="Bachelor of Science" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Field of study</label>
+              <input value={e.field} onChange={(ev) => update(i, 'field', ev.target.value)} placeholder="Computer Science" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Start year</label>
+              <input value={e.startYear} onChange={(ev) => update(i, 'startYear', ev.target.value)} placeholder="2018" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Graduation year</label>
+              <input value={e.endYear} onChange={(ev) => update(i, 'endYear', ev.target.value)} placeholder="2022" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
+            </div>
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors w-full justify-center">
+        <Plus className="h-3.5 w-3.5" />
+        Add education
+      </button>
+    </div>
+  );
+}
 
 function Section({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
@@ -651,5 +1516,166 @@ function SaveBar({ saving }: { saving: boolean }) {
         {saving ? 'Saving…' : 'Save changes'}
       </Button>
     </div>
+  );
+}
+
+function ToggleRow({
+  label, hint, checked, onChange, cautionWhenOn,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  cautionWhenOn?: boolean;
+}) {
+  return (
+    <div className={cn(
+      'flex items-start justify-between gap-4 rounded-xl border p-4 transition-colors',
+      cautionWhenOn && checked
+        ? 'border-amber-400/40 bg-amber-50/40 dark:bg-amber-900/10'
+        : 'border-border bg-background',
+    )}>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {hint && <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{hint}</p>}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background',
+          checked
+            ? cautionWhenOn ? 'bg-amber-500' : 'bg-primary'
+            : 'bg-muted-foreground/30',
+        )}
+      >
+        <span className={cn(
+          'inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+          checked ? 'translate-x-6' : 'translate-x-1',
+        )} />
+      </button>
+    </div>
+  );
+}
+
+interface LinkedInQueriesResponse {
+  maxQueries: number;
+  active: number;
+  queries: { keywords: string; jobType: string; defaultCategory: string }[];
+}
+
+function DataSection() {
+  const { data, mutate: mutateStatus } = useSWR<{ lastFetchedAt: string | null }>(
+    '/api/admin/refresh-status',
+    (url: string) => api.get<{ lastFetchedAt: string | null }>(url),
+    { refreshInterval: 60000 },
+  );
+  const { data: liQueries } = useSWR<LinkedInQueriesResponse>(
+    '/api/admin/linkedin-queries',
+    (url: string) => api.get<LinkedInQueriesResponse>(url),
+  );
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await api.post('/api/admin/refresh', {});
+      await mutateStatus();
+      toast({ title: 'Jobs refreshed', description: 'Job board has been updated with the latest listings.' });
+    } catch {
+      toast({ title: 'Refresh failed', description: 'Could not refresh jobs. Try again shortly.', variant: 'destructive' });
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  function formatLastFetched(iso: string | null | undefined): string {
+    if (!iso) return 'Never';
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+    return new Date(iso).toLocaleDateString();
+  }
+
+  const fullTimeQueries = liQueries?.queries.filter((q) => !q.jobType) ?? [];
+  const internQueries = liQueries?.queries.filter((q) => !!q.jobType) ?? [];
+
+  return (
+    <Section title="Data" description="Control when job listings are fetched and refreshed.">
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">Job Board</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Last refreshed: <span className="font-medium text-foreground">{formatLastFetched(data?.lastFetchedAt)}</span>
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">Auto-refreshes every 15 minutes.</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="gap-1.5 shrink-0"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
+            {refreshing ? 'Refreshing…' : 'Refresh Now'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium flex items-center gap-1.5">
+              <Linkedin className="h-3.5 w-3.5 text-[#0A66C2]" />
+              LinkedIn Search Queries
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {liQueries ? `${liQueries.active} active queries · capped at ${liQueries.maxQueries} max to avoid rate limits` : 'Loading…'}
+            </p>
+          </div>
+        </div>
+
+        {liQueries && (
+          <div className="space-y-3">
+            {fullTimeQueries.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">Full-time</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {fullTimeQueries.map((q) => (
+                    <span
+                      key={q.keywords}
+                      className="inline-flex items-center rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground"
+                    >
+                      {q.keywords}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {internQueries.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">Intern &amp; Co-op</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {internQueries.map((q) => (
+                    <span
+                      key={q.keywords}
+                      className="inline-flex items-center rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400"
+                    >
+                      {q.keywords}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Section>
   );
 }

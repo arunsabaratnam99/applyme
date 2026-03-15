@@ -2,7 +2,7 @@
 
 import React from 'react';
 import useSWR, { mutate } from 'swr';
-import { Bell, CheckCheck, Trash2, Building2, Zap, Clock } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, Building2, Zap, Clock, AlertTriangle, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
@@ -23,6 +23,7 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   peer_auto_added: <Building2 className="h-4 w-4 text-success" />,
   autofill_expired: <Clock className="h-4 w-4 text-warning" />,
   application_sent: <CheckCheck className="h-4 w-4 text-primary" />,
+  quick_apply_error: <AlertTriangle className="h-4 w-4 text-destructive" />,
 };
 
 export default function NotificationsPage() {
@@ -108,6 +109,28 @@ export default function NotificationsPage() {
                   <p className={`text-sm ${unread ? 'font-medium' : 'text-muted-foreground'}`}>
                     {message}
                   </p>
+                  {n.type === 'quick_apply_error' && (
+                    <div className="mt-1.5 space-y-1">
+                      {n.payload['errorDetail'] != null && (
+                        <p className="text-xs text-destructive/80 font-mono bg-destructive/5 rounded px-2 py-1 truncate">
+                          {`${n.payload['errorDetail']}`}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        {n.payload['atsType'] != null && (
+                          <span className="font-medium">{`${n.payload['atsType']}`.toUpperCase()}</span>
+                        )}
+                        <a
+                          href="/queue"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-0.5 text-primary hover:underline"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Fix in Autofill Profiles
+                        </a>
+                      </div>
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {formatRelativeTime(n.createdAt)}
                   </p>

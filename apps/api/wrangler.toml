@@ -6,8 +6,12 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 APP_BASE_URL = "http://localhost:3000"
 EMAIL_ENABLED = "false"
-LINKEDIN_ENABLED = "false"
-INDEED_ENABLED = "false"
+LINKEDIN_SCRAPER_ENABLED = "true"
+INDEED_SCRAPER_ENABLED = "true"
+BROWSER_ENABLED = "true"
 
-[[triggers]]
-crons = ["0 */4 * * *"]
+[browser]
+binding = "BROWSER"
+
+[triggers]
+crons = ["*/15 * * * *", "0 */4 * * *"]

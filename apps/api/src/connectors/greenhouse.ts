@@ -2,9 +2,12 @@ import { classifyJobCategory, classifyEmploymentType } from '@applyme/shared/cla
 import { computeCanonicalUrlHash, computeFingerprint } from '@applyme/shared/canonicalize';
 import { isCanadianLocation, normalizeLocation } from '@applyme/shared/utils';
 import type { NormalizedJob } from './ashby.js';
+import type { RequestBudget } from './linkedin_scraper.js';
 
-export async function fetchGreenhouseJobs(boardToken: string): Promise<NormalizedJob[]> {
+export async function fetchGreenhouseJobs(boardToken: string, budget?: RequestBudget): Promise<NormalizedJob[]> {
+  if (budget && budget.used >= budget.limit) return [];
   const url = `https://boards-api.greenhouse.io/v1/boards/${boardToken}/jobs?content=true`;
+  if (budget) budget.used++;
   const res = await fetch(url);
   if (!res.ok) return [];
 
@@ -21,9 +24,9 @@ export async function fetchGreenhouseJobs(boardToken: string): Promise<Normalize
     if (!category) continue;
 
     const jobUrl = job.absolute_url;
-    const canonicalUrlHash = await computeCanonicalUrlHash(jobUrl);
+    const canonicalUrlHash = computeCanonicalUrlHash(jobUrl);
     const postedAt = job.updated_at ? new Date(job.updated_at) : null;
-    const fingerprint = await computeFingerprint({
+    const fingerprint = computeFingerprint({
       company: boardToken,
       title: job.title,
       location: normalizeLocation(location),

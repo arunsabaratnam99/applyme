@@ -41,14 +41,23 @@ const BUSINESS_TITLE_KEYWORDS = [
 
 // ─── Internship / co-op keywords ─────────────────────────────────────────────
 
+// Unambiguous internship/co-op signals — explicit terms only, no role-level words
 const INTERNSHIP_TITLE_KEYWORDS = [
-  'intern', 'internship', 'co-op', 'coop', 'co op',
+  'intern', 'internship',
   'student', 'practicum', 'trainee',
+  'placement', 'work term',
 ];
 
+// Entry-level signals — only used when NO senior signal is present
 const NEW_GRAD_TITLE_KEYWORDS = [
   'new grad', 'new graduate', 'junior', 'entry level', 'entry-level',
-  'associate', 'graduate', 'early career', '0-1 year', '0-2 year',
+  'early career',
+];
+
+// Senior signals — any of these blocks new-grad / ambiguous internship detection
+const SENIOR_SIGNALS = [
+  'senior', 'sr.', 'sr ', 'lead', 'principal', 'staff', 'director',
+  'manager', 'head of', 'vp ', 'vice president',
 ];
 
 const CO_OP_KEYWORDS = ['co-op', 'coop', 'co op', 'cooperative education'];
@@ -87,10 +96,16 @@ export function classifyJobCategory(
 
 /**
  * Classifies employment type from job title.
- * Checks co_op first, then internship, defaults to full_time.
+ * Senior signals are checked first — if present the role is always full_time.
+ * Then co-op, then explicit internship keywords, then junior/new-grad signals.
  */
 export function classifyEmploymentType(title: string): EmploymentType {
   const lower = title.toLowerCase();
+
+  // Senior signals always win — no senior role should be classified as intern
+  if (SENIOR_SIGNALS.some((kw) => lower.includes(kw))) {
+    return 'full_time';
+  }
 
   if (CO_OP_KEYWORDS.some((kw) => lower.includes(kw))) {
     return 'co_op';
@@ -100,8 +115,9 @@ export function classifyEmploymentType(title: string): EmploymentType {
     return 'internship';
   }
 
+  // New-grad / junior signals → full_time (they are entry-level employees, not interns)
   if (NEW_GRAD_TITLE_KEYWORDS.some((kw) => lower.includes(kw))) {
-    return 'internship';
+    return 'full_time';
   }
 
   return 'full_time';

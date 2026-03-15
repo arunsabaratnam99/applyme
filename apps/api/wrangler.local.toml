@@ -1,0 +1,17 @@
+name = "applyme-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+APP_BASE_URL = "http://localhost:3000"
+EMAIL_ENABLED = "false"
+LINKEDIN_SCRAPER_ENABLED = "true"
+INDEED_SCRAPER_ENABLED = "true"
+BROWSER_ENABLED = "true"
+
+[browser]
+binding = "BROWSER"
+
+[[triggers]]
+crons = ["0 */4 * * *"]

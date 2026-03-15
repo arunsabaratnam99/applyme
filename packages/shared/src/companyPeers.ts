@@ -4,143 +4,180 @@ export interface CompanyPeerEntry {
   peerTags: string[];
 }
 
-/**
- * Static curated peer map of ~200 Canadian companies grouped by industry segment + size tier.
- * Used to power the "Similar companies" panel in the watchlist UI.
- */
-export const COMPANY_PEERS: Map<string, CompanyPeerEntry[]> = new Map([
-  // ─── Supply Chain / ERP (Kinaxis tier) ─────────────────────────────────────
-  ['kinaxis', [
-    { peerCompany: 'Descartes Systems', similarityScore: 90, peerTags: ['canadian-tech', 'supply-chain', 'ontario', 'mid-size'] },
-    { peerCompany: 'Tecsys', similarityScore: 87, peerTags: ['canadian-tech', 'supply-chain', 'quebec', 'mid-size'] },
-    { peerCompany: 'BluJay Solutions', similarityScore: 85, peerTags: ['supply-chain', 'logistics', 'mid-size'] },
-    { peerCompany: 'o9 Solutions', similarityScore: 82, peerTags: ['supply-chain', 'planning', 'global'] },
-    { peerCompany: 'E2open', similarityScore: 80, peerTags: ['supply-chain', 'saas', 'global'] },
-    { peerCompany: 'Manhattan Associates', similarityScore: 78, peerTags: ['supply-chain', 'wms', 'global'] },
-    { peerCompany: 'Infor', similarityScore: 75, peerTags: ['erp', 'supply-chain', 'enterprise'] },
-    { peerCompany: 'Relex Solutions', similarityScore: 73, peerTags: ['supply-chain', 'retail-planning', 'global'] },
-  ]],
-  ['descartes systems', [
-    { peerCompany: 'Kinaxis', similarityScore: 90, peerTags: ['canadian-tech', 'supply-chain', 'ontario'] },
-    { peerCompany: 'Tecsys', similarityScore: 85, peerTags: ['canadian-tech', 'supply-chain', 'mid-size'] },
-    { peerCompany: 'BluJay Solutions', similarityScore: 82, peerTags: ['logistics', 'supply-chain'] },
-    { peerCompany: 'project44', similarityScore: 78, peerTags: ['logistics', 'visibility', 'global'] },
-    { peerCompany: 'FourKites', similarityScore: 76, peerTags: ['logistics', 'visibility'] },
-  ]],
+interface CompanyProfile {
+  name: string;
+  tags: string[];
+}
 
-  // ─── Canadian Fintech ────────────────────────────────────────────────────────
-  ['shopify', [
-    { peerCompany: 'Lightspeed', similarityScore: 88, peerTags: ['canadian-tech', 'fintech', 'e-commerce', 'montreal'] },
-    { peerCompany: 'Nuvei', similarityScore: 84, peerTags: ['canadian-tech', 'payments', 'montreal'] },
-    { peerCompany: 'Wealthsimple', similarityScore: 80, peerTags: ['canadian-tech', 'fintech', 'toronto'] },
-    { peerCompany: 'Clearco', similarityScore: 75, peerTags: ['canadian-tech', 'fintech', 'toronto'] },
-    { peerCompany: 'Beanworks', similarityScore: 70, peerTags: ['canadian-tech', 'fintech', 'bc'] },
-    { peerCompany: 'TouchBistro', similarityScore: 72, peerTags: ['canadian-tech', 'saas', 'hospitality'] },
-  ]],
-  ['wealthsimple', [
-    { peerCompany: 'Borrowell', similarityScore: 87, peerTags: ['canadian-fintech', 'toronto'] },
-    { peerCompany: 'Nuvei', similarityScore: 83, peerTags: ['canadian-fintech', 'payments'] },
-    { peerCompany: 'League', similarityScore: 78, peerTags: ['canadian-tech', 'health-fintech'] },
-    { peerCompany: 'Koho Financial', similarityScore: 85, peerTags: ['canadian-fintech', 'neobank', 'toronto'] },
-    { peerCompany: 'Neo Financial', similarityScore: 84, peerTags: ['canadian-fintech', 'neobank', 'alberta'] },
-    { peerCompany: 'Stack Financial', similarityScore: 76, peerTags: ['canadian-fintech'] },
-  ]],
+// ── Tag taxonomy ──────────────────────────────────────────────────────────────
+// saas · b2b · b2c · developer-tools · fintech · payments · e-commerce
+// ai-ml · cloud-infra · cybersecurity · health-tech · hr-tech · edtech
+// enterprise · startup · public · canadian · us · remote-first
+// supply-chain · telco · aerospace · retail-tech · media · gaming
 
-  // ─── Healthcare Tech ──────────────────────────────────────────────────────────
-  ['pointclickcare', [
-    { peerCompany: 'Greenway Health', similarityScore: 85, peerTags: ['health-tech', 'ehr', 'mid-size'] },
-    { peerCompany: 'Jane App', similarityScore: 88, peerTags: ['canadian-tech', 'health-tech', 'bc'] },
-    { peerCompany: 'Telus Health', similarityScore: 82, peerTags: ['canadian-tech', 'health-tech', 'telco'] },
-    { peerCompany: 'MedBridge', similarityScore: 78, peerTags: ['health-tech', 'telehealth'] },
-    { peerCompany: 'Maple', similarityScore: 84, peerTags: ['canadian-tech', 'telehealth', 'toronto'] },
-    { peerCompany: 'Think Research', similarityScore: 80, peerTags: ['canadian-tech', 'health-tech', 'toronto'] },
-  ]],
+const PROFILES: CompanyProfile[] = [
+  // ── Big Tech ──────────────────────────────────────────────────────────────
+  { name: 'Google',      tags: ['b2b', 'b2c', 'ai-ml', 'cloud-infra', 'developer-tools', 'advertising', 'enterprise', 'public', 'us', 'remote-first'] },
+  { name: 'Microsoft',   tags: ['b2b', 'enterprise', 'cloud-infra', 'developer-tools', 'ai-ml', 'saas', 'public', 'us'] },
+  { name: 'Apple',       tags: ['b2c', 'hardware', 'mobile', 'enterprise', 'public', 'us', 'consumer'] },
+  { name: 'Amazon',      tags: ['b2b', 'b2c', 'cloud-infra', 'e-commerce', 'enterprise', 'public', 'us', 'logistics'] },
+  { name: 'Meta',        tags: ['b2c', 'social', 'advertising', 'ai-ml', 'public', 'us', 'consumer', 'mobile'] },
+  { name: 'Netflix',     tags: ['b2c', 'media', 'streaming', 'public', 'us', 'consumer', 'remote-first'] },
+  { name: 'Spotify',     tags: ['b2c', 'media', 'streaming', 'saas', 'public', 'us', 'consumer', 'remote-first'] },
+  { name: 'Uber',        tags: ['b2c', 'marketplace', 'logistics', 'mobile', 'public', 'us', 'consumer'] },
+  { name: 'Airbnb',      tags: ['b2c', 'marketplace', 'travel', 'public', 'us', 'consumer'] },
+  { name: 'Salesforce',  tags: ['b2b', 'saas', 'crm', 'enterprise', 'public', 'us', 'cloud-infra'] },
+  { name: 'Oracle',      tags: ['b2b', 'enterprise', 'database', 'cloud-infra', 'saas', 'public', 'us'] },
+  { name: 'SAP',         tags: ['b2b', 'enterprise', 'erp', 'saas', 'public', 'supply-chain'] },
 
-  // ─── Canadian AI / ML ─────────────────────────────────────────────────────────
-  ['cohere', [
-    { peerCompany: 'Waabi', similarityScore: 85, peerTags: ['canadian-ai', 'autonomous', 'toronto'] },
-    { peerCompany: 'Layer 6', similarityScore: 88, peerTags: ['canadian-ai', 'ml', 'toronto'] },
-    { peerCompany: 'BorealisAI', similarityScore: 87, peerTags: ['canadian-ai', 'rbc', 'toronto'] },
-    { peerCompany: 'Darwin AI', similarityScore: 80, peerTags: ['canadian-ai', 'waterloo'] },
-    { peerCompany: 'Integrate.ai', similarityScore: 78, peerTags: ['canadian-ai', 'data', 'toronto'] },
-    { peerCompany: 'Untether AI', similarityScore: 82, peerTags: ['canadian-ai', 'hardware', 'toronto'] },
-  ]],
+  // ── Developer Tools / Cloud ───────────────────────────────────────────────
+  { name: 'GitHub',      tags: ['b2b', 'developer-tools', 'saas', 'cloud-infra', 'ai-ml', 'enterprise', 'us', 'remote-first'] },
+  { name: 'Vercel',      tags: ['b2b', 'developer-tools', 'saas', 'cloud-infra', 'startup', 'us', 'remote-first'] },
+  { name: 'Linear',      tags: ['b2b', 'developer-tools', 'saas', 'startup', 'us', 'remote-first', 'productivity'] },
+  { name: 'Figma',       tags: ['b2b', 'developer-tools', 'saas', 'design', 'startup', 'us', 'remote-first', 'productivity'] },
+  { name: 'Notion',      tags: ['b2b', 'b2c', 'saas', 'productivity', 'startup', 'us', 'remote-first', 'developer-tools'] },
+  { name: 'Atlassian',   tags: ['b2b', 'developer-tools', 'saas', 'enterprise', 'productivity', 'public', 'us'] },
+  { name: 'Stripe',      tags: ['b2b', 'fintech', 'payments', 'developer-tools', 'saas', 'startup', 'us', 'remote-first'] },
+  { name: 'Twilio',      tags: ['b2b', 'developer-tools', 'saas', 'communications', 'cloud-infra', 'public', 'us'] },
+  { name: 'Cloudflare',  tags: ['b2b', 'cloud-infra', 'cybersecurity', 'developer-tools', 'saas', 'public', 'us', 'remote-first'] },
+  { name: 'Snowflake',   tags: ['b2b', 'cloud-infra', 'data', 'enterprise', 'saas', 'public', 'us', 'ai-ml'] },
+  { name: 'Databricks',  tags: ['b2b', 'cloud-infra', 'data', 'ai-ml', 'enterprise', 'startup', 'us'] },
+  { name: 'HashiCorp',   tags: ['b2b', 'developer-tools', 'cloud-infra', 'saas', 'enterprise', 'public', 'us', 'remote-first'] },
+  { name: 'PlanetScale', tags: ['b2b', 'developer-tools', 'saas', 'database', 'cloud-infra', 'startup', 'us', 'remote-first'] },
+  { name: 'Supabase',    tags: ['b2b', 'developer-tools', 'saas', 'database', 'cloud-infra', 'startup', 'remote-first', 'open-source'] },
+  { name: 'Retool',      tags: ['b2b', 'developer-tools', 'saas', 'startup', 'us', 'enterprise', 'productivity'] },
+  { name: 'Postman',     tags: ['b2b', 'developer-tools', 'saas', 'startup', 'us', 'remote-first'] },
+  { name: 'Datadog',     tags: ['b2b', 'cloud-infra', 'developer-tools', 'saas', 'enterprise', 'public', 'us', 'observability'] },
+  { name: 'New Relic',   tags: ['b2b', 'cloud-infra', 'developer-tools', 'saas', 'enterprise', 'public', 'us', 'observability'] },
 
-  // ─── Canadian Cybersecurity ────────────────────────────────────────────────────
-  ['blackberry', [
-    { peerCompany: 'Absolute Software', similarityScore: 88, peerTags: ['canadian-security', 'bc'] },
-    { peerCompany: 'eSentire', similarityScore: 85, peerTags: ['canadian-security', 'mdr', 'ontario'] },
-    { peerCompany: 'Arctic Wolf', similarityScore: 83, peerTags: ['security', 'soc', 'ontario-hq'] },
-    { peerCompany: 'Cybereason', similarityScore: 78, peerTags: ['security', 'edr', 'global'] },
-    { peerCompany: 'Sygnia', similarityScore: 75, peerTags: ['security', 'incident-response'] },
-  ]],
+  // ── Fintech / Payments ────────────────────────────────────────────────────
+  { name: 'Shopify',     tags: ['b2b', 'e-commerce', 'fintech', 'payments', 'saas', 'public', 'canadian', 'remote-first'] },
+  { name: 'Wealthsimple',tags: ['b2c', 'fintech', 'payments', 'investing', 'startup', 'canadian', 'toronto'] },
+  { name: 'Nuvei',       tags: ['b2b', 'fintech', 'payments', 'enterprise', 'public', 'canadian', 'montreal'] },
+  { name: 'Lightspeed',  tags: ['b2b', 'e-commerce', 'fintech', 'saas', 'public', 'canadian', 'montreal', 'retail-tech'] },
+  { name: 'Clearco',     tags: ['b2b', 'fintech', 'e-commerce', 'startup', 'canadian', 'toronto'] },
+  { name: 'Koho Financial', tags: ['b2c', 'fintech', 'neobank', 'payments', 'startup', 'canadian', 'toronto'] },
+  { name: 'Neo Financial', tags: ['b2c', 'fintech', 'neobank', 'payments', 'startup', 'canadian'] },
+  { name: 'Borrowell',   tags: ['b2c', 'fintech', 'lending', 'startup', 'canadian', 'toronto'] },
+  { name: 'TouchBistro', tags: ['b2b', 'saas', 'fintech', 'retail-tech', 'startup', 'canadian', 'toronto'] },
 
-  // ─── Canadian Edtech ──────────────────────────────────────────────────────────
-  ['d2l', [
-    { peerCompany: 'Top Hat', similarityScore: 88, peerTags: ['canadian-edtech', 'toronto'] },
-    { peerCompany: 'Prodigy Game', similarityScore: 82, peerTags: ['canadian-edtech', 'ontario'] },
-    { peerCompany: 'Knewton', similarityScore: 75, peerTags: ['edtech', 'adaptive-learning'] },
-    { peerCompany: 'Riipen', similarityScore: 80, peerTags: ['canadian-edtech', 'bc'] },
-    { peerCompany: 'SkillsBuild', similarityScore: 73, peerTags: ['edtech', 'upskilling'] },
-  ]],
+  // ── Canadian AI / Tech ────────────────────────────────────────────────────
+  { name: 'Cohere',      tags: ['b2b', 'ai-ml', 'developer-tools', 'saas', 'startup', 'canadian', 'toronto', 'llm'] },
+  { name: 'Waabi',       tags: ['b2b', 'ai-ml', 'autonomous', 'startup', 'canadian', 'toronto'] },
+  { name: 'BorealisAI',  tags: ['b2b', 'ai-ml', 'research', 'canadian', 'toronto'] },
+  { name: 'Layer 6',     tags: ['b2b', 'ai-ml', 'fintech', 'research', 'canadian', 'toronto'] },
+  { name: 'Darwin AI',   tags: ['b2b', 'ai-ml', 'startup', 'canadian', 'waterloo'] },
+  { name: 'OpenAI',      tags: ['b2b', 'ai-ml', 'developer-tools', 'saas', 'startup', 'us', 'llm', 'enterprise'] },
+  { name: 'Anthropic',   tags: ['b2b', 'ai-ml', 'developer-tools', 'saas', 'startup', 'us', 'llm', 'enterprise'] },
+  { name: 'Mistral',     tags: ['b2b', 'ai-ml', 'developer-tools', 'saas', 'startup', 'llm', 'open-source'] },
+  { name: 'Hugging Face',tags: ['b2b', 'ai-ml', 'developer-tools', 'saas', 'startup', 'llm', 'open-source', 'remote-first'] },
+  { name: 'Perplexity',  tags: ['b2b', 'b2c', 'ai-ml', 'saas', 'startup', 'us', 'llm', 'consumer'] },
 
-  // ─── Canadian Telco / Networking ──────────────────────────────────────────────
-  ['telus', [
-    { peerCompany: 'Rogers', similarityScore: 92, peerTags: ['canadian-telco', 'toronto'] },
-    { peerCompany: 'Bell Canada', similarityScore: 91, peerTags: ['canadian-telco', 'montreal'] },
-    { peerCompany: 'Cogeco', similarityScore: 82, peerTags: ['canadian-telco', 'ontario-quebec'] },
-    { peerCompany: 'Eastlink', similarityScore: 78, peerTags: ['canadian-telco', 'atlantic'] },
-    { peerCompany: 'Distributel', similarityScore: 72, peerTags: ['canadian-isp'] },
-  ]],
+  // ── Canadian Enterprise / Supply Chain ───────────────────────────────────
+  { name: 'Kinaxis',     tags: ['b2b', 'enterprise', 'supply-chain', 'saas', 'public', 'canadian', 'ontario'] },
+  { name: 'OpenText',    tags: ['b2b', 'enterprise', 'saas', 'public', 'canadian', 'ontario', 'ecm'] },
+  { name: 'Ceridian',    tags: ['b2b', 'hr-tech', 'saas', 'enterprise', 'public', 'canadian'] },
+  { name: 'Descartes Systems', tags: ['b2b', 'enterprise', 'supply-chain', 'logistics', 'saas', 'public', 'canadian', 'ontario'] },
+  { name: 'Tecsys',      tags: ['b2b', 'enterprise', 'supply-chain', 'saas', 'public', 'canadian', 'montreal'] },
 
-  // ─── Canadian Aerospace / Defense ─────────────────────────────────────────────
-  ['bombardier', [
-    { peerCompany: 'CAE', similarityScore: 90, peerTags: ['canadian-aerospace', 'simulation', 'montreal'] },
-    { peerCompany: 'Magellan Aerospace', similarityScore: 87, peerTags: ['canadian-aerospace', 'ontario'] },
-    { peerCompany: 'L3Harris Canada', similarityScore: 82, peerTags: ['canadian-defense', 'ontario'] },
-    { peerCompany: 'General Dynamics Canada', similarityScore: 85, peerTags: ['canadian-defense', 'ontario'] },
-    { peerCompany: 'MDA Space', similarityScore: 80, peerTags: ['canadian-space', 'bc'] },
-  ]],
+  // ── Canadian Health / Edtech ──────────────────────────────────────────────
+  { name: 'PointClickCare', tags: ['b2b', 'health-tech', 'saas', 'enterprise', 'public', 'canadian', 'ontario'] },
+  { name: 'Jane App',    tags: ['b2b', 'health-tech', 'saas', 'startup', 'canadian', 'bc'] },
+  { name: 'Maple',       tags: ['b2c', 'health-tech', 'telehealth', 'startup', 'canadian', 'toronto'] },
+  { name: 'D2L',         tags: ['b2b', 'edtech', 'saas', 'enterprise', 'public', 'canadian', 'waterloo'] },
+  { name: 'Top Hat',     tags: ['b2b', 'edtech', 'saas', 'startup', 'canadian', 'toronto'] },
 
-  // ─── Canadian E-commerce / Retail Tech ────────────────────────────────────────
-  ['lightspeed', [
-    { peerCompany: 'Shopify', similarityScore: 88, peerTags: ['canadian-tech', 'e-commerce'] },
-    { peerCompany: 'TouchBistro', similarityScore: 84, peerTags: ['canadian-tech', 'restaurant-tech'] },
-    { peerCompany: 'Tulip Retail', similarityScore: 80, peerTags: ['canadian-tech', 'retail-tech'] },
-    { peerCompany: 'ApplyBoard', similarityScore: 72, peerTags: ['canadian-tech', 'waterloo'] },
-  ]],
+  // ── Canadian Telco / Aerospace ────────────────────────────────────────────
+  { name: 'Telus',       tags: ['b2b', 'b2c', 'telco', 'health-tech', 'public', 'canadian', 'bc'] },
+  { name: 'Rogers',      tags: ['b2c', 'telco', 'media', 'public', 'canadian', 'toronto'] },
+  { name: 'Bell Canada', tags: ['b2c', 'telco', 'media', 'public', 'canadian', 'montreal'] },
+  { name: 'BlackBerry',  tags: ['b2b', 'cybersecurity', 'enterprise', 'saas', 'public', 'canadian', 'ontario'] },
+  { name: 'Bombardier',  tags: ['b2b', 'aerospace', 'enterprise', 'public', 'canadian', 'montreal'] },
+  { name: 'CAE',         tags: ['b2b', 'aerospace', 'simulation', 'enterprise', 'public', 'canadian', 'montreal'] },
 
-  // ─── OpenText tier ─────────────────────────────────────────────────────────────
-  ['opentext', [
-    { peerCompany: 'Hummingbird', similarityScore: 82, peerTags: ['canadian-enterprise', 'ecm'] },
-    { peerCompany: 'Documentum', similarityScore: 78, peerTags: ['enterprise', 'ecm'] },
-    { peerCompany: 'Box', similarityScore: 75, peerTags: ['content-management', 'cloud'] },
-    { peerCompany: 'Laserfiche', similarityScore: 76, peerTags: ['ecm', 'workflow'] },
-  ]],
+  // ── HR Tech ───────────────────────────────────────────────────────────────
+  { name: 'Humi',        tags: ['b2b', 'hr-tech', 'saas', 'startup', 'canadian', 'toronto'] },
+  { name: 'Rippling',    tags: ['b2b', 'hr-tech', 'saas', 'enterprise', 'startup', 'us', 'remote-first'] },
+  { name: 'Workday',     tags: ['b2b', 'hr-tech', 'saas', 'enterprise', 'public', 'us', 'erp'] },
+  { name: 'Greenhouse',  tags: ['b2b', 'hr-tech', 'saas', 'startup', 'us', 'ats'] },
+  { name: 'Lever',       tags: ['b2b', 'hr-tech', 'saas', 'startup', 'us', 'ats'] },
+  { name: 'Lattice',     tags: ['b2b', 'hr-tech', 'saas', 'startup', 'us', 'performance'] },
 
-  // ─── Canadian HR Tech ─────────────────────────────────────────────────────────
-  ['ceridian', [
-    { peerCompany: 'ADP Canada', similarityScore: 90, peerTags: ['hr-tech', 'payroll', 'canada'] },
-    { peerCompany: 'Payworks', similarityScore: 87, peerTags: ['canadian-hr-tech', 'payroll', 'winnipeg'] },
-    { peerCompany: 'Rise People', similarityScore: 83, peerTags: ['canadian-hr-tech', 'bc'] },
-    { peerCompany: 'Humi', similarityScore: 85, peerTags: ['canadian-hr-tech', 'toronto'] },
-    { peerCompany: 'Collage HR', similarityScore: 80, peerTags: ['canadian-hr-tech', 'toronto'] },
-  ]],
-]);
+  // ── Cybersecurity ─────────────────────────────────────────────────────────
+  { name: 'CrowdStrike', tags: ['b2b', 'cybersecurity', 'saas', 'enterprise', 'public', 'us', 'cloud-infra'] },
+  { name: 'SentinelOne', tags: ['b2b', 'cybersecurity', 'saas', 'enterprise', 'public', 'us'] },
+  { name: 'Palo Alto Networks', tags: ['b2b', 'cybersecurity', 'enterprise', 'public', 'us', 'cloud-infra'] },
+  { name: 'Arctic Wolf', tags: ['b2b', 'cybersecurity', 'saas', 'startup', 'canadian', 'ontario'] },
+  { name: 'eSentire',    tags: ['b2b', 'cybersecurity', 'managed-services', 'startup', 'canadian', 'ontario'] },
+];
 
-/**
- * Looks up peer companies for a given anchor company name.
- * Returns empty array if no peers are found.
- */
-export function getPeersForCompany(companyName: string): CompanyPeerEntry[] {
-  const key = companyName.toLowerCase().trim()
+// Build a lookup map (lowercase name → profile)
+const PROFILE_MAP = new Map<string, CompanyProfile>(
+  PROFILES.map((p) => [p.name.toLowerCase(), p]),
+);
+
+function jaccard(a: string[], b: string[]): number {
+  const setA = new Set(a);
+  const setB = new Set(b);
+  let intersection = 0;
+  for (const t of setA) if (setB.has(t)) intersection++;
+  const union = new Set([...a, ...b]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function normalizeKey(name: string): string {
+  return name.toLowerCase().trim()
     .replace(/,?\s+(inc\.?|llc\.?|ltd\.?|corp\.?|co\.?|limited|incorporated)$/i, '');
-  return COMPANY_PEERS.get(key) ?? [];
+}
+
+export interface CompanyCatalogEntry {
+  name: string;
+  domain: string;
 }
 
 /**
- * Returns all companies in the peer map (anchor companies only).
+ * All known companies with canonical casing and guessed domain,
+ * derived from PROFILES. Used to power the watchlist search.
+ */
+export const COMPANY_CATALOG: CompanyCatalogEntry[] = PROFILES.map((p) => {
+  const domain = p.name
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9.-]/g, '') + '.com';
+  return { name: p.name, domain };
+});
+
+/**
+ * Looks up similar companies for a given anchor company name using
+ * tag-based Jaccard similarity. Works for any company in PROFILES.
+ * Returns top 6 peers with score ≥ 25%, excluding the anchor itself.
+ */
+export function getPeersForCompany(companyName: string): CompanyPeerEntry[] {
+  const key = normalizeKey(companyName);
+  const anchor = PROFILE_MAP.get(key);
+  if (!anchor) return [];
+
+  const results: CompanyPeerEntry[] = [];
+  for (const profile of PROFILES) {
+    if (normalizeKey(profile.name) === key) continue;
+    const score = jaccard(anchor.tags, profile.tags);
+    if (score >= 0.25) {
+      results.push({
+        peerCompany: profile.name,
+        similarityScore: Math.round(score * 100),
+        peerTags: profile.tags.filter((t) => anchor.tags.includes(t)),
+      });
+    }
+  }
+
+  return results
+    .sort((a, b) => b.similarityScore - a.similarityScore)
+    .slice(0, 6);
+}
+
+/**
+ * Returns all companies that have a profile (can generate peers).
  */
 export function getAllAnchorCompanies(): string[] {
-  return Array.from(COMPANY_PEERS.keys());
+  return PROFILES.map((p) => p.name);
 }

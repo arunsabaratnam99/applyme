@@ -1,5 +1,8 @@
 declare const process: { env: Record<string, string | undefined> };
-const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:8787';
+const API_BASE =
+  process.env['NEXT_PUBLIC_API_URL'] ??
+  process.env['NEXT_PUBLIC_API_BASE_URL'] ??
+  'http://localhost:8787';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const init: RequestInit = {
@@ -14,10 +17,29 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, init);
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
-      error?: string;
-    };
-    throw new ApiError(res.status, body.error ?? res.statusText);
+    const rawText = await res.text().catch(() => '');
+    console.error('[api] error response', res.status, res.url, rawText);
+    let message: string;
+    try {
+      const body = JSON.parse(rawText) as { error?: unknown; success?: boolean };
+      if (typeof body.error === 'string') {
+        message = body.error;
+      } else if (body.error && typeof body.error === 'object') {
+        const zodErr = body.error as { issues?: { message: string; path: (string | number)[] }[] };
+        if (zodErr.issues?.length) {
+          message = zodErr.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+        } else {
+          message = JSON.stringify(body.error);
+        }
+      } else {
+        message = rawText || res.statusText;
+      }
+    } catch {
+      message = rawText || res.statusText;
+    }
+    let parsedBody: Record<string, unknown> | undefined;
+    try { parsedBody = JSON.parse(rawText) as Record<string, unknown>; } catch { /* ignore */ }
+    throw new ApiError(res.status, message, parsedBody);
   }
 
   return res.json() as Promise<T>;
@@ -27,6 +49,7 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    public readonly body?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiError';

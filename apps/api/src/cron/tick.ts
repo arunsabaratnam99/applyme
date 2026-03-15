@@ -1,24 +1,45 @@
-import { eq, and, lt, isNull } from 'drizzle-orm';
+import { eq, and, lt, isNull, inArray } from 'drizzle-orm';
 import { schema, createDb } from '@applyme/db';
 import { scoreJob, passesHardFilters } from '@applyme/shared/scoring';
 import { getPeersForCompany, isTier1Company } from '@applyme/shared';
 import { draftExpiresAt, queueExpiresAt, applicationExpiresAt } from '@applyme/shared/utils';
+import { attemptApply } from '../applicators/index.js';
+import type { ApplyPayload } from '../applicators/index.js';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { fetchAshbyJobs } from '../connectors/ashby.js';
 import { fetchLeverJobs } from '../connectors/lever.js';
 import { fetchGreenhouseJobs } from '../connectors/greenhouse.js';
 import { fetchJobBankJobs } from '../connectors/jobbank.js';
 import { fetchGithubRepoJobs } from '../connectors/github.js';
+import { fetchRemotiveJobs } from '../connectors/remotive.js';
+import { fetchWorkAtStartupJobs } from '../connectors/workatastartup.js';
+import { fetchLinkedInJobs } from '../connectors/linkedin_scraper.js';
+import type { RequestBudget } from '../connectors/linkedin_scraper.js';
+import { fetchIndeedJobs } from '../connectors/indeed_scraper.js';
+import { fetchTheMuseJobs } from '../connectors/themuse.js';
+import { fetchArbeitnowJobs } from '../connectors/arbeitnow.js';
 import type { NormalizedJob } from '../connectors/ashby.js';
 import type { Env } from '../types.js';
 
-export async function runCronTick(env: Env): Promise<void> {
+// Fast tick: ingest + match only (runs every 15 min)
+// Full tick: all phases (runs every 4 h)
+const FAST_CRON = '*/15 * * * *';
+
+export async function runCronTick(env: Env, cron?: string): Promise<void> {
   const db = createDb(env.DATABASE_URL);
+  const isFast = cron === FAST_CRON;
+
+  console.log(`[cron] tick type: ${isFast ? 'fast (ingest+match)' : 'full'}, cron="${cron ?? 'manual'}"`);
 
   try {
-    await ingestJobs(db, env);
+    await ingestJobs(db, env, isFast);
     await runMatching(db);
-    await runPeerDiscovery(db);
-    await expireStaleItems(db);
+    if (!isFast) {
+      await runPeerDiscovery(db);
+      await expireStaleItems(db);
+      await runAutoApply(db, env);
+    }
   } catch (err) {
     console.error('[cron] tick error:', err);
     throw err;
@@ -27,79 +48,131 @@ export async function runCronTick(env: Env): Promise<void> {
 
 // ─── Job ingestion ─────────────────────────────────────────────────────────────
 
-async function ingestJobs(db: ReturnType<typeof createDb>, env: Env): Promise<void> {
+async function ingestJobs(db: ReturnType<typeof createDb>, env: Env, isFast = false): Promise<void> {
   const sources = await db.query.jobSources.findMany({
     where: eq(schema.jobSources.enabled, true),
   });
 
-  const allJobs: Array<NormalizedJob & { sourceId: string; sourceType: string }> = [];
+  let totalNew = 0;
+  let totalSkipped = 0;
+  // Shared subrequest budget across all connectors — Cloudflare Workers limit is 50.
+  // Reserve ~20 for DB WebSocket connections (Neon opens a WS per query invocation).
+  const budget: RequestBudget = { used: 0, limit: 45 };
 
   for (const source of sources) {
     const config = source.config as Record<string, string>;
-    let jobs: NormalizedJob[] = [];
+    let rawJobs: NormalizedJob[] = [];
+
+    // MVP: only scrape from LinkedIn and GitHub
+    const MVP_SOURCES = new Set(['linkedin_scraper', 'github_repo']);
+    if (!MVP_SOURCES.has(source.sourceType)) {
+      console.log(`[cron] skipping non-MVP source: ${source.sourceType}`);
+      continue;
+    }
 
     try {
       switch (source.sourceType) {
         case 'ashby':
-          jobs = await fetchAshbyJobs(config['boardSlug'] ?? '');
+          rawJobs = await fetchAshbyJobs(config['boardSlug'] ?? '', budget);
           break;
         case 'lever':
-          jobs = await fetchLeverJobs(config['siteSlug'] ?? '');
+          rawJobs = await fetchLeverJobs(config['siteSlug'] ?? '', budget);
           break;
         case 'greenhouse':
-          jobs = await fetchGreenhouseJobs(config['boardToken'] ?? '');
+          rawJobs = await fetchGreenhouseJobs(config['boardToken'] ?? '', budget);
           break;
         case 'jobbank_ca':
-          jobs = await fetchJobBankJobs();
+          rawJobs = await fetchJobBankJobs(budget);
           break;
         case 'github_repo':
-          jobs = await fetchGithubRepoJobs();
+          rawJobs = await fetchGithubRepoJobs();
           break;
-        case 'linkedin':
-          if (env.LINKEDIN_ENABLED !== 'true') break;
-          // LinkedIn connector: feature-flagged, implement when API access granted
+        case 'remotive':
+          rawJobs = await fetchRemotiveJobs(budget);
           break;
-        case 'indeed':
-          if (env.INDEED_ENABLED !== 'true') break;
-          // Indeed connector: feature-flagged, implement when Publisher account set up
+        case 'workatastartup':
+          rawJobs = await fetchWorkAtStartupJobs();
+          break;
+        case 'linkedin_scraper':
+          if (env.LINKEDIN_SCRAPER_ENABLED === 'false') break;
+          rawJobs = await fetchLinkedInJobs(budget);
+          break;
+        case 'indeed_scraper':
+          if (env.INDEED_SCRAPER_ENABLED === 'false') break;
+          rawJobs = await fetchIndeedJobs(env);
+          break;
+        case 'themuse':
+          rawJobs = await fetchTheMuseJobs(budget);
+          break;
+        case 'arbeitnow':
+          rawJobs = await fetchArbeitnowJobs(budget);
           break;
       }
     } catch (err) {
       console.error(`[cron] connector error for ${source.sourceType}:`, err);
+      continue;
     }
 
-    allJobs.push(...jobs.map((j) => ({ ...j, sourceId: source.id, sourceType: source.sourceType })));
-  }
+    // Skip-known: filter out externalIds already seen in the last run.
+    // linkedin_scraper and indeed_scraper always return the same page-1 results, so
+    // the cache would block every new insert after run 1. Use DB onConflictDoNothing
+    // as the sole dedup mechanism for those sources.
+    const skipCache = source.sourceType === 'linkedin_scraper' || source.sourceType === 'indeed_scraper';
+    const knownIds = new Set<string>(
+      skipCache || !Array.isArray(source.lastExternalIds) ? [] : (source.lastExternalIds as string[]),
+    );
+    const currentIds = rawJobs.map((j) => j.externalId);
+    const newJobs = skipCache ? rawJobs : rawJobs.filter((j) => !knownIds.has(j.externalId));
+    const skipped = rawJobs.length - newJobs.length;
 
-  // Upsert jobs — ignore conflicts on canonical_url_hash or fingerprint
-  for (const job of allJobs) {
-    try {
-      await db.insert(schema.jobs).values({
-        sourceId: job.sourceId,
-        externalId: job.externalId,
-        canonicalUrlHash: job.canonicalUrlHash,
-        fingerprint: job.fingerprint,
-        company: job.company,
-        title: job.title,
-        location: job.location,
-        country: job.country,
-        workplaceType: job.workplaceType,
-        postedAt: job.postedAt,
-        descriptionPlain: job.descriptionPlain,
-        jobUrl: job.jobUrl,
-        applyUrl: job.applyUrl,
-        applyType: job.applyType,
-        applyEmail: job.applyEmail,
-        sourceType: job.sourceType,
-        jobCategory: job.jobCategory,
-        employmentType: job.employmentType,
-      }).onConflictDoNothing();
-    } catch {
-      // Silently skip duplicate
+    console.log(`[cron] ${source.sourceType}: ${rawJobs.length} fetched, ${newJobs.length} new, ${skipped} skipped`);
+    totalSkipped += skipped;
+
+    // Bulk-insert in chunks of 100 to minimise DB round-trips
+    const CHUNK = 100;
+    const rows = newJobs.map((job) => ({
+      sourceId: source.id,
+      externalId: job.externalId,
+      canonicalUrlHash: job.canonicalUrlHash,
+      fingerprint: job.fingerprint,
+      company: job.company,
+      title: job.title,
+      location: job.location,
+      country: job.country,
+      workplaceType: job.workplaceType,
+      postedAt: job.postedAt,
+      descriptionPlain: job.descriptionPlain,
+      jobUrl: job.jobUrl,
+      applyUrl: job.applyUrl,
+      applyType: job.applyType,
+      applyEmail: job.applyEmail,
+      sourceType: source.sourceType,
+      jobCategory: job.jobCategory,
+      employmentType: job.employmentType,
+      salaryMin: job.salaryMin != null ? String(job.salaryMin) : null,
+      salaryMax: job.salaryMax != null ? String(job.salaryMax) : null,
+    }));
+
+    if (rows.length > 0) {
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        try {
+          await db.insert(schema.jobs).values(rows.slice(i, i + CHUNK)).onConflictDoNothing();
+        } catch {
+          // Silently skip chunk on error
+        }
+      }
+      totalNew += rows.length;
     }
+
+    // Update source tracking — cap stored IDs to 500 most recent to avoid JSONB bloat
+    const storedIds = currentIds.slice(-500);
+    await db
+      .update(schema.jobSources)
+      .set({ lastFetchedAt: new Date(), lastExternalIds: storedIds })
+      .where(eq(schema.jobSources.id, source.id));
   }
 
-  console.log(`[cron] ingested ${allJobs.length} jobs from ${sources.length} sources`);
+  console.log(`[cron] ingested ${totalNew} new jobs, skipped ${totalSkipped} known jobs from ${sources.length} sources`);
 }
 
 // ─── Matching ──────────────────────────────────────────────────────────────────
@@ -110,6 +183,14 @@ async function runMatching(db: ReturnType<typeof createDb>): Promise<void> {
     with: { profile: true },
   });
 
+  // Fetch recent jobs once — shared across all users
+  const recentJobs = await db.query.jobs.findMany({
+    where: eq(schema.jobs.country, 'CA'),
+    orderBy: (j, { desc }) => [desc(j.createdAt)],
+    limit: 500,
+  });
+  const jobIds = recentJobs.map((j) => j.id);
+
   for (const user of users) {
     if (!user.profile) continue;
 
@@ -118,11 +199,16 @@ async function runMatching(db: ReturnType<typeof createDb>): Promise<void> {
       with: { items: true },
     });
 
-    const recentJobs = await db.query.jobs.findMany({
-      where: eq(schema.jobs.country, 'CA'),
-      orderBy: (j, { desc }) => [desc(j.createdAt)],
-      limit: 500,
-    });
+    // Bulk-load all existing matches for this user in one query
+    const existingMatches = jobIds.length > 0
+      ? await db.query.jobMatches.findMany({
+          where: and(
+            eq(schema.jobMatches.userId, user.id),
+            inArray(schema.jobMatches.jobId, jobIds),
+          ),
+        })
+      : [];
+    const matchedJobIds = new Set(existingMatches.map((m) => m.jobId));
 
     const profile = {
       userId: user.profile.userId,
@@ -139,15 +225,20 @@ async function runMatching(db: ReturnType<typeof createDb>): Promise<void> {
       employmentTypes: (user.profile.employmentTypes as ('full_time' | 'internship' | 'co_op')[]) ?? ['full_time', 'internship', 'co_op'],
     };
 
+    const watchlistItems = (watchlist?.items ?? []).map((item) => ({
+      id: item.id,
+      watchlistId: item.watchlistId,
+      itemType: item.itemType as 'company' | 'role' | 'keyword',
+      value: item.value,
+      atsUrl: item.atsUrl,
+      companyTier: item.companyTier as 'tier1' | 'standard',
+      autoDiscoverPeers: item.autoDiscoverPeers,
+    }));
+
+    const toInsert: Array<{ userId: string; jobId: string; score: number; reasons: unknown }> = [];
+
     for (const job of recentJobs) {
-      // Skip if already matched
-      const existing = await db.query.jobMatches.findFirst({
-        where: and(
-          eq(schema.jobMatches.userId, user.id),
-          eq(schema.jobMatches.jobId, job.id),
-        ),
-      });
-      if (existing) continue;
+      if (matchedJobIds.has(job.id)) continue;
 
       const jobForScoring = {
         id: job.id,
@@ -166,34 +257,21 @@ async function runMatching(db: ReturnType<typeof createDb>): Promise<void> {
         applyUrl: job.applyUrl,
         applyType: job.applyType as 'url' | 'email',
         applyEmail: job.applyEmail,
-        sourceType: job.sourceType as 'ashby' | 'lever' | 'greenhouse' | 'jobbank_ca' | 'linkedin' | 'indeed' | 'github_repo',
+        sourceType: job.sourceType as 'ashby' | 'lever' | 'greenhouse' | 'jobbank_ca' | 'linkedin' | 'indeed' | 'github_repo' | 'remotive' | 'workatastartup' | 'linkedin_scraper' | 'indeed_scraper',
         jobCategory: job.jobCategory as 'software' | 'business',
         employmentType: job.employmentType as 'full_time' | 'internship' | 'co_op',
         createdAt: job.createdAt,
       };
 
-      const result = scoreJob({
-        job: jobForScoring,
-        profile,
-        watchlistItems: (watchlist?.items ?? []).map((item) => ({
-          id: item.id,
-          watchlistId: item.watchlistId,
-          itemType: item.itemType as 'company' | 'role' | 'keyword',
-          value: item.value,
-          atsUrl: item.atsUrl,
-          companyTier: item.companyTier as 'tier1' | 'standard',
-          autoDiscoverPeers: item.autoDiscoverPeers,
-        })),
-      });
-
+      const result = scoreJob({ job: jobForScoring, profile, watchlistItems });
       if (!result.passed || result.score < 30) continue;
 
-      await db.insert(schema.jobMatches).values({
-        userId: user.id,
-        jobId: job.id,
-        score: result.score,
-        reasons: result.reasons,
-      });
+      toInsert.push({ userId: user.id, jobId: job.id, score: result.score, reasons: result.reasons });
+    }
+
+    // Bulk-insert all new matches for this user in one statement
+    if (toInsert.length > 0) {
+      await db.insert(schema.jobMatches).values(toInsert).onConflictDoNothing();
     }
   }
 
@@ -213,29 +291,34 @@ async function runPeerDiscovery(db: ReturnType<typeof createDb>): Promise<void> 
 
   for (const item of watchlistsWithPeerDiscovery) {
     const userId = item.watchlist.userId;
-    const peers = getPeersForCompany(item.value);
+    const peers = getPeersForCompany(item.value).slice(0, 5);
+    if (peers.length === 0) continue;
 
-    for (const peer of peers.slice(0, 5)) {
-      // Check if peer already in watchlist
-      const exists = await db.query.watchlistItems.findFirst({
-        where: and(
-          eq(schema.watchlistItems.watchlistId, item.watchlistId),
-          eq(schema.watchlistItems.value, peer.peerCompany),
-        ),
-      });
-      if (exists) continue;
+    // Bulk-check which peers are already in the watchlist
+    const peerNames = peers.map((p) => p.peerCompany);
+    const existingItems = await db.query.watchlistItems.findMany({
+      where: and(
+        eq(schema.watchlistItems.watchlistId, item.watchlistId),
+        inArray(schema.watchlistItems.value, peerNames),
+      ),
+    });
+    const existingValues = new Set(existingItems.map((e) => e.value));
 
-      // Add peer to watchlist
-      await db.insert(schema.watchlistItems).values({
+    const newPeers = peers.filter((p) => !existingValues.has(p.peerCompany));
+    if (newPeers.length === 0) continue;
+
+    await db.insert(schema.watchlistItems).values(
+      newPeers.map((peer) => ({
         watchlistId: item.watchlistId,
-        itemType: 'company',
+        itemType: 'company' as const,
         value: peer.peerCompany,
-        companyTier: isTier1Company(peer.peerCompany) ? 'tier1' : 'standard',
+        companyTier: (isTier1Company(peer.peerCompany) ? 'tier1' : 'standard') as 'tier1' | 'standard',
         autoDiscoverPeers: false,
-      });
+      })),
+    );
 
-      // Notify user
-      await db.insert(schema.notifications).values({
+    await db.insert(schema.notifications).values(
+      newPeers.map((peer) => ({
         userId,
         type: 'peer_auto_added',
         payload: {
@@ -245,11 +328,146 @@ async function runPeerDiscovery(db: ReturnType<typeof createDb>): Promise<void> 
           similarityScore: peer.similarityScore,
           tags: peer.peerTags,
         },
-      });
-    }
+      })),
+    );
   }
 
   console.log('[cron] peer discovery complete');
+}
+
+// ─── Auto-apply retry ─────────────────────────────────────────────────────────
+
+async function runAutoApply(db: ReturnType<typeof createDb>, env: Env): Promise<void> {
+  const now = new Date();
+
+  // Find pending queue items that haven't been attempted yet (attemptCount = 0)
+  // or have been attempted fewer than 3 times and aren't expired
+  const pendingItems = await db.query.autofillQueue.findMany({
+    where: eq(schema.autofillQueue.status, 'pending'),
+    with: { job: true, draft: true },
+    limit: 20,
+  });
+
+  // Filter: only items not yet attempted or attemptCount < 3 and still valid
+  const toRetry = pendingItems.filter(
+    (item) => item.attemptCount < 3 && item.expiresAt > now,
+  );
+
+  if (toRetry.length === 0) {
+    console.log('[cron] auto-apply: no pending items to retry');
+    return;
+  }
+
+  console.log(`[cron] auto-apply: retrying ${toRetry.length} pending queue items`);
+
+  const s3 = new S3Client({
+    region: 'auto',
+    endpoint: env.R2_ENDPOINT,
+    credentials: { accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY },
+  });
+
+  for (const item of toRetry) {
+    try {
+      // Get resume signed URL
+      let resumePdfUrl: string | null = null;
+      if (item.draft?.resumeVersionId) {
+        const resumeVersion = await db.query.resumeVersions.findFirst({
+          where: eq(schema.resumeVersions.id, item.draft.resumeVersionId),
+        });
+        if (resumeVersion?.r2Key) {
+          try {
+            resumePdfUrl = await getSignedUrl(
+              s3,
+              new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: resumeVersion.r2Key }),
+              { expiresIn: 900 },
+            );
+          } catch { /* continue without resume */ }
+        }
+      }
+
+      const fieldMap = item.fieldMap as ApplyPayload['fieldMap'];
+      const payload: ApplyPayload = {
+        queueItemId: item.id,
+        applyUrl: item.applyUrl,
+        atsType: item.atsType,
+        fieldMap,
+        resumePdfUrl,
+        coverLetter: item.draft?.coverLetter ?? '',
+      };
+
+      // Mark as being attempted
+      await db
+        .update(schema.autofillQueue)
+        .set({ attemptCount: item.attemptCount + 1, attemptedAt: new Date() })
+        .where(eq(schema.autofillQueue.id, item.id));
+
+      const result = await attemptApply(payload, env);
+
+      if (result.success) {
+        await db
+          .update(schema.autofillQueue)
+          .set({ status: 'completed', submissionResponse: result.response ?? null })
+          .where(eq(schema.autofillQueue.id, item.id));
+
+        await db.insert(schema.applications).values({
+          userId: item.userId,
+          jobId: item.jobId,
+          draftId: item.draftId,
+          status: 'applied',
+          submittedData: {
+            name: fieldMap.fields.find((f) => f.fieldKey === 'first_name')?.profileValue ?? '',
+            email: fieldMap.fields.find((f) => f.fieldKey === 'email')?.profileValue ?? '',
+            coverLetter: item.draft?.coverLetter ?? '',
+            atsType: item.atsType,
+            applyUrl: item.applyUrl,
+            timestamp: new Date().toISOString(),
+            applyMethod: item.atsType === 'ashby' || item.atsType === 'greenhouse' || item.atsType === 'lever' ? 'ats_api' : 'autofill_queue',
+          },
+          applyMethod: item.atsType === 'ashby' || item.atsType === 'greenhouse' || item.atsType === 'lever' ? 'ats_api' : 'autofill_queue',
+          expiresAt: applicationExpiresAt(),
+        });
+
+        await db.update(schema.applicationDrafts)
+          .set({ status: 'sent' })
+          .where(eq(schema.applicationDrafts.id, item.draftId));
+
+        await db.insert(schema.notifications).values({
+          userId: item.userId,
+          type: 'application_sent',
+          payload: {
+            message: `Application submitted to ${item.job?.company ?? 'company'} — ${item.job?.title ?? 'role'}`,
+            jobId: item.jobId,
+            company: item.job?.company ?? '',
+            title: item.job?.title ?? '',
+            atsType: item.atsType,
+          },
+        });
+      } else {
+        if (item.attemptCount + 1 >= 3) {
+          await db
+            .update(schema.autofillQueue)
+            .set({ status: 'failed', errorDetail: result.error ?? 'Unknown error' })
+            .where(eq(schema.autofillQueue.id, item.id));
+
+          await db.insert(schema.notifications).values({
+            userId: item.userId,
+            type: 'quick_apply_error',
+            payload: {
+              message: `Quick Apply failed for ${item.job?.title ?? 'role'} at ${item.job?.company ?? 'company'}`,
+              jobTitle: item.job?.title ?? null,
+              company: item.job?.company ?? null,
+              atsType: item.atsType,
+              errorDetail: result.error ?? 'Unknown error',
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.error(`[cron] auto-apply error for queue item ${item.id}:`, err);
+    }
+  }
+
+  console.log('[cron] auto-apply complete');
 }
 
 // ─── Expiry sweep ──────────────────────────────────────────────────────────────

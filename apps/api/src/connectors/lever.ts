@@ -2,9 +2,12 @@ import { classifyJobCategory, classifyEmploymentType } from '@applyme/shared/cla
 import { computeCanonicalUrlHash, computeFingerprint } from '@applyme/shared/canonicalize';
 import { isCanadianLocation, normalizeLocation } from '@applyme/shared/utils';
 import type { NormalizedJob } from './ashby.js';
+import type { RequestBudget } from './linkedin_scraper.js';
 
-export async function fetchLeverJobs(siteSlug: string): Promise<NormalizedJob[]> {
+export async function fetchLeverJobs(siteSlug: string, budget?: RequestBudget): Promise<NormalizedJob[]> {
+  if (budget && budget.used >= budget.limit) return [];
   const url = `https://api.lever.co/v0/postings/${siteSlug}?mode=json&limit=100`;
+  if (budget) budget.used++;
   const res = await fetch(url);
   if (!res.ok) return [];
 
@@ -20,9 +23,9 @@ export async function fetchLeverJobs(siteSlug: string): Promise<NormalizedJob[]>
     if (!category) continue;
 
     const jobUrl = `https://jobs.lever.co/${siteSlug}/${job.id}`;
-    const canonicalUrlHash = await computeCanonicalUrlHash(jobUrl);
+    const canonicalUrlHash = computeCanonicalUrlHash(jobUrl);
     const postedAt = job.createdAt ? new Date(job.createdAt) : null;
-    const fingerprint = await computeFingerprint({
+    const fingerprint = computeFingerprint({
       company: siteSlug,
       title: job.text,
       location: normalizeLocation(location),

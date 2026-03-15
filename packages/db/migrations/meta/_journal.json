@@ -1,0 +1,27 @@
+{
+  "version": "6",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1772262873411,
+      "tag": "0000_wise_umar",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1772322100492,
+      "tag": "0001_remarkable_junta",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1773366239710,
+      "tag": "0002_light_dreadnoughts",
+      "breakpoints": true
+    }
+  ]
+}

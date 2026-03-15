@@ -13,7 +13,11 @@ export type SourceType =
   | 'jobbank_ca'
   | 'linkedin'
   | 'indeed'
-  | 'github_repo';
+  | 'github_repo'
+  | 'remotive'
+  | 'workatastartup'
+  | 'linkedin_scraper'
+  | 'indeed_scraper';
 
 export type ApplyType = 'url' | 'email';
 

@@ -17,25 +17,36 @@ interface CompanyAutocompleteProps {
 }
 
 const POPULAR: Company[] = [
-  { name: 'Shopify', domain: 'shopify.com', logo: 'https://logo.clearbit.com/shopify.com' },
-  { name: 'Google', domain: 'google.com', logo: 'https://logo.clearbit.com/google.com' },
-  { name: 'Microsoft', domain: 'microsoft.com', logo: 'https://logo.clearbit.com/microsoft.com' },
-  { name: 'Amazon', domain: 'amazon.com', logo: 'https://logo.clearbit.com/amazon.com' },
-  { name: 'Apple', domain: 'apple.com', logo: 'https://logo.clearbit.com/apple.com' },
-  { name: 'Meta', domain: 'meta.com', logo: 'https://logo.clearbit.com/meta.com' },
-  { name: 'Stripe', domain: 'stripe.com', logo: 'https://logo.clearbit.com/stripe.com' },
-  { name: 'Atlassian', domain: 'atlassian.com', logo: 'https://logo.clearbit.com/atlassian.com' },
-  { name: 'Notion', domain: 'notion.so', logo: 'https://logo.clearbit.com/notion.so' },
-  { name: 'Figma', domain: 'figma.com', logo: 'https://logo.clearbit.com/figma.com' },
-  { name: 'Vercel', domain: 'vercel.com', logo: 'https://logo.clearbit.com/vercel.com' },
-  { name: 'Linear', domain: 'linear.app', logo: 'https://logo.clearbit.com/linear.app' },
+  { name: 'Shopify',    domain: 'shopify.com',    logo: '/api/logo?domain=shopify.com' },
+  { name: 'Google',     domain: 'google.com',     logo: '/api/logo?domain=google.com' },
+  { name: 'Microsoft',  domain: 'microsoft.com',  logo: '/api/logo?domain=microsoft.com' },
+  { name: 'Amazon',     domain: 'amazon.com',     logo: '/api/logo?domain=amazon.com' },
+  { name: 'Apple',      domain: 'apple.com',      logo: '/api/logo?domain=apple.com' },
+  { name: 'Meta',       domain: 'meta.com',       logo: '/api/logo?domain=meta.com' },
+  { name: 'Stripe',     domain: 'stripe.com',     logo: '/api/logo?domain=stripe.com' },
+  { name: 'Atlassian',  domain: 'atlassian.com',  logo: '/api/logo?domain=atlassian.com' },
+  { name: 'Notion',     domain: 'notion.so',      logo: '/api/logo?domain=notion.so' },
+  { name: 'Figma',      domain: 'figma.com',      logo: '/api/logo?domain=figma.com' },
+  { name: 'Vercel',     domain: 'vercel.com',     logo: '/api/logo?domain=vercel.com' },
+  { name: 'Linear',     domain: 'linear.app',     logo: '/api/logo?domain=linear.app' },
+  { name: 'Salesforce', domain: 'salesforce.com', logo: '/api/logo?domain=salesforce.com' },
+  { name: 'Uber',       domain: 'uber.com',       logo: '/api/logo?domain=uber.com' },
+  { name: 'Airbnb',     domain: 'airbnb.com',     logo: '/api/logo?domain=airbnb.com' },
+  { name: 'Spotify',    domain: 'spotify.com',    logo: '/api/logo?domain=spotify.com' },
+  { name: 'Netflix',    domain: 'netflix.com',    logo: '/api/logo?domain=netflix.com' },
+  { name: 'Databricks', domain: 'databricks.com', logo: '/api/logo?domain=databricks.com' },
+  { name: 'OpenAI',     domain: 'openai.com',     logo: '/api/logo?domain=openai.com' },
+  { name: 'Snowflake',  domain: 'snowflake.com',  logo: '/api/logo?domain=snowflake.com' },
+  { name: 'Twilio',     domain: 'twilio.com',     logo: '/api/logo?domain=twilio.com' },
+  { name: 'Cloudflare', domain: 'cloudflare.com', logo: '/api/logo?domain=cloudflare.com' },
+  { name: 'HashiCorp',  domain: 'hashicorp.com',  logo: '/api/logo?domain=hashicorp.com' },
+  { name: 'GitHub',     domain: 'github.com',     logo: '/api/logo?domain=github.com' },
 ];
 
 export function CompanyAutocomplete({ companies, onChange, className }: CompanyAutocompleteProps) {
   const [query, setQuery] = React.useState('');
   const [suggestions, setSuggestions] = React.useState<Company[]>([]);
   const [open, setOpen] = React.useState(false);
-  const [loading, setLoading] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -55,29 +66,23 @@ export function CompanyAutocomplete({ companies, onChange, className }: CompanyA
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  async function fetchSuggestions(q: string) {
+  function fetchSuggestions(q: string) {
     if (!q.trim()) {
       setSuggestions(POPULAR.filter((p) => !companies.some((c) => c.domain === p.domain)));
       return;
     }
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `https://autocomplete.clearbit.com/v1/companies/suggest?query=${encodeURIComponent(q)}`,
-      );
-      if (res.ok) {
-        const data = (await res.json()) as Array<{ name: string; domain: string; logo: string }>;
-        setSuggestions(
-          data
-            .filter((d) => !companies.some((c) => c.domain === d.domain))
-            .slice(0, 8)
-            .map((d) => ({ name: d.name, domain: d.domain, logo: d.logo })),
-        );
-      }
-    } catch {
-      setSuggestions([]);
-    } finally {
-      setLoading(false);
+    const lower = q.toLowerCase();
+    const matched = POPULAR.filter(
+      (p) =>
+        !companies.some((c) => c.domain === p.domain) &&
+        (p.name.toLowerCase().includes(lower) || p.domain.toLowerCase().includes(lower)),
+    );
+    // If no known match, offer a custom entry so the user can still add it
+    if (matched.length === 0) {
+      const guessedDomain = q.toLowerCase().replace(/[^a-z0-9.-]/g, '') + (q.includes('.') ? '' : '.com');
+      setSuggestions([{ name: q, domain: guessedDomain, logo: `/api/logo?domain=${encodeURIComponent(guessedDomain)}` }]);
+    } else {
+      setSuggestions(matched.slice(0, 8));
     }
   }
 
@@ -145,7 +150,7 @@ export function CompanyAutocomplete({ companies, onChange, className }: CompanyA
           onChange={handleInputChange}
           onFocus={handleFocus}
           placeholder="Search companies…"
-          className="w-full rounded-lg border border-input bg-background pl-9 pr-9 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
+          className="w-full rounded-lg border border-input bg-background pl-9 pr-9 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 transition-colors"
         />
         <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
           <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
@@ -158,21 +163,15 @@ export function CompanyAutocomplete({ companies, onChange, className }: CompanyA
           ref={dropdownRef}
           className="absolute z-50 mt-1.5 w-full rounded-xl border border-border bg-popover shadow-xl overflow-hidden"
         >
-          {loading && (
-            <div className="px-3 py-3 text-xs text-muted-foreground flex items-center gap-2">
-              <span className="inline-block h-3 w-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-              Searching…
-            </div>
-          )}
-          {!loading && suggestions.length === 0 && query.length > 0 && (
+          {suggestions.length === 0 && query.length > 0 && (
             <div className="px-3 py-3 text-xs text-muted-foreground">No results for "{query}"</div>
           )}
-          {!loading && suggestions.length === 0 && !query && (
+          {suggestions.length === 0 && !query && (
             <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               Popular companies
             </div>
           )}
-          {!loading && query.length > 0 && suggestions.length > 0 && (
+          {query.length > 0 && suggestions.length > 0 && (
             <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               Results
             </div>
@@ -200,8 +199,13 @@ export function CompanyAutocomplete({ companies, onChange, className }: CompanyA
   );
 }
 
-function CompanyLogo({ logo, name, size }: { logo: string; name: string; size: number }) {
+const CompanyLogo = React.memo(function CompanyLogo({ logo, name, size }: { logo: string; name: string; size: number }) {
   const [err, setErr] = React.useState(false);
+
+  React.useEffect(() => {
+    setErr(false);
+  }, [logo]);
+
   if (err || !logo) {
     return (
       <div
@@ -219,10 +223,9 @@ function CompanyLogo({ logo, name, size }: { logo: string; name: string; size: n
       alt={name}
       width={size}
       height={size}
-      referrerPolicy="no-referrer"
       onError={() => setErr(true)}
       className="rounded-sm object-contain flex-shrink-0"
       style={{ width: size, height: size }}
     />
   );
-}
+});

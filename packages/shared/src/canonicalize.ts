@@ -20,36 +20,41 @@ export function normalizeUrl(url: string): string {
 }
 
 /**
- * Encodes a string to a hex SHA-256 digest using the Web Crypto API.
- * Works in CF Workers, browsers, and Node 20+.
+ * Synchronous FNV-1a 64-bit hash (emulated with two 32-bit halves).
+ * Zero async overhead — safe to call per-job in Cloudflare Workers.
  */
-async function sha256Hex(input: string): Promise<string> {
-  const encoded = new TextEncoder().encode(input);
-  const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', encoded);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+function fnv1aHex(input: string): string {
+  let hi = 0x811c9dc5 >>> 0;
+  let lo = 0x811c9dc5 >>> 0;
+  for (let i = 0; i < input.length; i++) {
+    const c = input.charCodeAt(i);
+    lo ^= c;
+    lo = Math.imul(lo, 0x01000193) >>> 0;
+    hi ^= c;
+    hi = Math.imul(hi, 0x01000193) >>> 0;
+  }
+  return hi.toString(16).padStart(8, '0') + lo.toString(16).padStart(8, '0');
 }
 
 /**
- * Computes a SHA-256 hash of a normalized URL.
+ * Computes a hash of a normalized URL.
  * Used as the primary dedup key.
  */
-export async function computeCanonicalUrlHash(url: string): Promise<string> {
-  return sha256Hex(normalizeUrl(url));
+export function computeCanonicalUrlHash(url: string): string {
+  return fnv1aHex(normalizeUrl(url));
 }
 
 /**
  * Computes a content fingerprint from job fields.
- * SHA-256 of: company|title|location|postedDate
+ * Hash of: company|title|location|postedDate
  * Used as a secondary dedup key to catch same job posted at different URLs.
  */
-export async function computeFingerprint(params: {
+export function computeFingerprint(params: {
   company: string;
   title: string;
   location: string;
   postedAt: Date | null;
-}): Promise<string> {
+}): string {
   const { company, title, location, postedAt } = params;
   const input = [
     company.toLowerCase().trim(),
@@ -57,7 +62,7 @@ export async function computeFingerprint(params: {
     location.toLowerCase().trim(),
     postedAt ? postedAt.toISOString().slice(0, 10) : '',
   ].join('|');
-  return sha256Hex(input);
+  return fnv1aHex(input);
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { MessageType, QueueItem, ResumeData, AtsType } from './types.js';
+import type { MessageType, QueueItem, AutofillProfile, ResumeData, AtsType } from './types.js';
 
 // ─── Detect ATS from current URL ─────────────────────────────────────────────
 
@@ -153,51 +153,99 @@ function autofill(atsType: AtsType, data: ResumeData): void {
   }
 }
 
-// ─── Banner UI ────────────────────────────────────────────────────────────────
+// ─── fieldMap-based fill ──────────────────────────────────────────────────────
 
-function showBanner(item: QueueItem): void {
+function fillFromFieldMap(fields: Array<{ fieldKey: string; selector: string | null; label: string; profileValue: string; inputType: string }>): void {
+  for (const field of fields) {
+    if (!field.profileValue) continue;
+    let filled = false;
+    if (field.selector) {
+      filled = fillInput(field.selector, field.profileValue);
+    }
+    if (!filled) {
+      filled = fillByLabel(field.label, field.profileValue);
+    }
+    // Fallback: try common field key patterns
+    if (!filled) {
+      const selectors = fieldKeyToSelectors(field.fieldKey);
+      for (const sel of selectors) {
+        if (fillInput(sel, field.profileValue)) { filled = true; break; }
+      }
+    }
+  }
+}
+
+function fieldKeyToSelectors(fieldKey: string): string[] {
+  const map: Record<string, string[]> = {
+    first_name: ['input[name*="first" i][name*="name" i]', 'input[id*="first" i][id*="name" i]', '#first_name', '#firstName'],
+    last_name:  ['input[name*="last" i][name*="name" i]',  'input[id*="last" i][id*="name" i]',  '#last_name',  '#lastName'],
+    email:      ['input[type="email"]', 'input[name*="email" i]'],
+    phone:      ['input[type="tel"]',   'input[name*="phone" i]'],
+    location:   ['input[name*="location" i]', 'input[name*="city" i]'],
+    linkedin_url: ['input[name*="linkedin" i]'],
+    github_url:   ['input[name*="github" i]'],
+    website_url:  ['input[name*="website" i]', 'input[name*="portfolio" i]'],
+    cover_letter: ['textarea[name*="cover" i]', 'textarea[id*="cover" i]', 'textarea'],
+    visa_auth:    ['select[name*="visa" i]', 'input[name*="visa" i]'],
+  };
+  return map[fieldKey] ?? [];
+}
+
+// ─── Scan for unfilled required fields ───────────────────────────────────────
+
+function scanUnfilledRequired(): Array<{ fieldKey: string; label: string; el: HTMLElement }> {
+  const results: Array<{ fieldKey: string; label: string; el: HTMLElement }> = [];
+  const required = document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+    'input[required], textarea[required], select[required], [aria-required="true"]',
+  );
+  for (const el of Array.from(required)) {
+    if (el instanceof HTMLInputElement && el.type === 'file') continue;
+    const val = el instanceof HTMLSelectElement ? el.value : el.value;
+    if (val.trim()) continue;
+    const labelEl = el.id ? document.querySelector(`label[for="${el.id}"]`) : el.closest('label');
+    const placeholder = 'placeholder' in el ? (el as HTMLInputElement).placeholder : '';
+    const label = labelEl?.textContent?.trim() ?? placeholder ?? el.name ?? 'Unknown field';
+    const fieldKey = (el.name || el.id || label).toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    results.push({ fieldKey, label, el });
+  }
+  return results;
+}
+
+// ─── Auto-submit ──────────────────────────────────────────────────────────────
+
+function tryAutoSubmit(): boolean {
+  const submitBtn = document.querySelector<HTMLButtonElement | HTMLInputElement>(
+    'button[type="submit"], input[type="submit"], button[data-qa*="submit" i], button[aria-label*="submit" i]',
+  );
+  if (!submitBtn) return false;
+  submitBtn.click();
+  return true;
+}
+
+// ─── Status banner ────────────────────────────────────────────────────────────
+
+function showStatusBanner(message: string, type: 'success' | 'warning' | 'error'): void {
   const existing = document.getElementById('applyme-banner');
   if (existing) existing.remove();
 
+  const colors = { success: '#16a34a', warning: '#d97706', error: '#dc2626' };
   const banner = document.createElement('div');
   banner.id = 'applyme-banner';
   banner.style.cssText = `
     position: fixed; top: 16px; right: 16px; z-index: 2147483647;
-    background: #1d6fd4; color: #fff; border-radius: 10px;
+    background: ${colors[type]}; color: #fff; border-radius: 10px;
     padding: 12px 16px; box-shadow: 0 4px 20px rgba(0,0,0,.25);
-    font-family: system-ui, sans-serif; font-size: 13px; max-width: 300px;
-    display: flex; flex-direction: column; gap: 8px;
+    font-family: system-ui, sans-serif; font-size: 13px; max-width: 340px;
+    display: flex; flex-direction: column; gap: 6px;
   `;
-
   banner.innerHTML = `
-    <div style="font-weight:600;font-size:14px;">ApplyMe Autofill Ready</div>
-    <div style="opacity:.85;font-size:12px;">Detected ATS: ${item.atsType}</div>
-    <div style="display:flex;gap:8px;margin-top:2px;">
-      <button id="applyme-fill-btn" style="background:#fff;color:#1d6fd4;border:none;border-radius:6px;padding:5px 12px;font-weight:600;cursor:pointer;font-size:12px;">
-        Fill form
-      </button>
-      <button id="applyme-dismiss-btn" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;">
-        Dismiss
-      </button>
-    </div>
+    <div style="font-weight:600;font-size:14px;">ApplyMe</div>
+    <div style="opacity:.9;font-size:12px;line-height:1.4;">${message}</div>
+    <button id="applyme-dismiss-btn" style="margin-top:4px;align-self:flex-start;background:rgba(255,255,255,.25);color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;">Dismiss</button>
   `;
-
   document.body.appendChild(banner);
-
-  document.getElementById('applyme-fill-btn')?.addEventListener('click', () => {
-    autofill(item.atsType, item.resumeData);
-    banner.innerHTML = `<div style="font-weight:600;">✓ Form filled — review and submit</div>`;
-    setTimeout(() => banner.remove(), 4000);
-    chrome.runtime.sendMessage<MessageType>({
-      type: 'AUTOFILL_DONE',
-      itemId: item.id,
-      success: true,
-    });
-  });
-
-  document.getElementById('applyme-dismiss-btn')?.addEventListener('click', () => {
-    banner.remove();
-  });
+  document.getElementById('applyme-dismiss-btn')?.addEventListener('click', () => banner.remove());
+  if (type === 'success') setTimeout(() => banner.remove(), 5000);
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -206,10 +254,11 @@ async function init(): Promise<void> {
   const ats = detectAts();
   if (ats === 'unknown') return;
 
-  chrome.runtime.sendMessage<MessageType>({ type: 'GET_QUEUE' }, (response) => {
-    const res = response as { type: string; items: QueueItem[] };
-    if (res?.type !== 'QUEUE_RESULT') return;
-    const match = res.items.find((i) => {
+  chrome.runtime.sendMessage<MessageType>({ type: 'GET_QUEUE' }, (queueResp) => {
+    const qRes = queueResp as { type: string; items: QueueItem[] };
+    if (qRes?.type !== 'QUEUE_RESULT') return;
+
+    const match = qRes.items.find((i) => {
       try {
         const itemUrl = new URL(i.applyUrl);
         return itemUrl.hostname === location.hostname && location.href.includes(itemUrl.pathname.split('?')[0] ?? '');
@@ -217,8 +266,72 @@ async function init(): Promise<void> {
         return false;
       }
     });
-    if (match) showBanner(match);
+    if (!match) return;
+
+    // Check per-ATS enabled
+    chrome.runtime.sendMessage<MessageType>({ type: 'GET_PROFILES' }, (profilesResp) => {
+      const pRes = profilesResp as { type: string; profiles: AutofillProfile[] };
+      const profiles: AutofillProfile[] = pRes?.type === 'PROFILES_RESULT' ? pRes.profiles : [];
+      const atsProfile = profiles.find((p) => p.atsType === match.atsType);
+      if (atsProfile && !atsProfile.enabled) return;
+
+      // Run autofill
+      try {
+        // Fill via fieldMap (server-supplied values)
+        if (match.fieldMap?.fields?.length) {
+          fillFromFieldMap(match.fieldMap.fields);
+        } else {
+          // Legacy: fall back to resumeData-based fill
+          autofill(match.atsType, match.resumeData ?? {} as ReturnType<typeof buildResumeDataFromFieldMap>);
+        }
+
+        // Fill unknown fields from profile answers
+        if (atsProfile?.unknownFields) {
+          for (const uf of atsProfile.unknownFields) {
+            if (!uf.userValue) continue;
+            fillByLabel(uf.label, uf.userValue) || fillInput(`[name*="${uf.fieldKey}" i]`, uf.userValue);
+          }
+        }
+
+        // Scan for remaining unfilled required fields
+        const unfilled = scanUnfilledRequired();
+        for (const uf of unfilled) {
+          chrome.runtime.sendMessage<MessageType>({
+            type: 'REPORT_UNKNOWN_FIELD',
+            itemId: match.id,
+            fieldKey: uf.fieldKey,
+            label: uf.label,
+          });
+        }
+
+        if (unfilled.length === 0) {
+          showStatusBanner('Form filled ✓ — submitting…', 'success');
+          setTimeout(() => {
+            const submitted = tryAutoSubmit();
+            if (submitted) {
+              chrome.runtime.sendMessage<MessageType>({ type: 'AUTOFILL_DONE', itemId: match.id, success: true });
+            } else {
+              showStatusBanner('Form filled ✓ — please review and click Submit.', 'success');
+              chrome.runtime.sendMessage<MessageType>({ type: 'AUTOFILL_DONE', itemId: match.id, success: true });
+            }
+          }, 800);
+        } else {
+          showStatusBanner(
+            `Form filled — ${unfilled.length} required field${unfilled.length > 1 ? 's' : ''} need attention. Review and submit when ready.`,
+            'warning',
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        showStatusBanner(`AutoFill error: ${msg}`, 'error');
+        chrome.runtime.sendMessage<MessageType>({ type: 'AUTOFILL_ERROR', itemId: match.id, errorDetail: msg });
+      }
+    });
   });
+}
+
+function buildResumeDataFromFieldMap(_item: QueueItem): ResumeData {
+  return { firstName: '', lastName: '', email: '', phone: '', location: '', linkedinUrl: '', githubUrl: '', websiteUrl: '', summary: '', workExperience: [], education: [], skills: [] };
 }
 
 // Delay slightly to let SPA apps mount
