@@ -151,7 +151,19 @@ jobs.get('/:id/resolve-apply-url', async (c) => {
     return c.json({ applyUrl: job.applyUrl });
   }
 
-  const resolved = await resolveLinkedInApplyUrl(job.jobUrl).catch(() => null);
+  const resolved = await resolveLinkedInApplyUrl(job.jobUrl).catch((err) => {
+    console.error(`[resolve-apply-url] resolver threw for job ${id}: ${err}`);
+    return null;
+  });
+
+  // Cache the resolved URL back to the DB so future clicks are instant
+  if (resolved && resolved !== job.applyUrl) {
+    db.update(schema.jobs)
+      .set({ applyUrl: resolved })
+      .where(eq(schema.jobs.id, id))
+      .catch(() => {});
+  }
+
   return c.json({ applyUrl: resolved ?? job.applyUrl });
 });
 

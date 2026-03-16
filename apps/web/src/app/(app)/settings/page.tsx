@@ -6,7 +6,7 @@ import {
   User, FileText, Briefcase, Tag, AlertTriangle,
   LogOut, Save, ChevronRight, Globe, DollarSign,
   Camera, Download, Loader2, CheckCircle2, Eye, Lock,
-  Zap, Linkedin, Github, Link2, RefreshCw, Database, Mail, X, Plus, ClipboardList,
+  Zap, Linkedin, Github, Link2, RefreshCw, Database, Mail, X, Plus, ClipboardList, ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
@@ -14,6 +14,7 @@ import { toast } from '@/hooks/use-toast';
 import { TagInput } from '@/components/settings/TagInput';
 import { UniversityAutocomplete } from '@/components/settings/UniversityAutocomplete';
 import { CompanyInput } from '@/components/settings/CompanyInput';
+import { CityInput } from '@/components/settings/CityInput';
 import { ResumeUpload, type ParsedResume, type WorkEntry, type EducationEntry } from '@/components/settings/ResumeUpload';
 import { cn } from '@/lib/cn';
 
@@ -220,10 +221,17 @@ export default function SettingsPage() {
   const { data: me } = useSWR<MeResponse>(ME_KEY, (url: string) => api.get<MeResponse>(url));
   const { data: resumes, mutate: mutateResumes } = useSWR<Resume[]>(RESUMES_KEY, (url: string) => api.get<Resume[]>(url));
   const [saving, setSaving] = React.useState(false);
+  const [autoSaving, setAutoSaving] = React.useState(false);
+  const [autoSaved, setAutoSaved] = React.useState(false);
+  const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [avatarUploading, setAvatarUploading] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<TabId>('profile');
   const [form, setForm] = React.useState<FormState>(DEFAULT_FORM);
+  const [workCollapsed, setWorkCollapsed] = React.useState<boolean[]>([]);
+  const [eduCollapsed, setEduCollapsed] = React.useState<boolean[]>([]);
   const [resumeFromFields, setResumeFromFields] = React.useState<string[]>([]);
+  const [suggestedKeywords, setSuggestedKeywords] = React.useState<string[]>([]);
+  const [dismissedKeywords, setDismissedKeywords] = React.useState<Set<string>>(new Set());
   const [resumeUploadKey, setResumeUploadKey] = React.useState(0);
   const avatarInputRef = React.useRef<HTMLInputElement>(null);
   const [confirmModal, setConfirmModal] = React.useState<{ open: boolean; title: string; message: string; resolve: (v: boolean) => void } | null>(null);
@@ -357,6 +365,8 @@ export default function SettingsPage() {
     if (parsed.keywords?.length) {
       next.keywords = [...new Set([...prev.keywords, ...parsed.keywords])];
       touched.push('keywords');
+      setSuggestedKeywords(parsed.keywords);
+      setDismissedKeywords(new Set());
     }
     if (parsed.locations?.length) {
       next.locations = [...new Set([...prev.locations, ...parsed.locations])];
@@ -392,7 +402,6 @@ export default function SettingsPage() {
         veteranStatus: next.veteranStatus || null,
         disabilityStatus: next.disabilityStatus || null,
       };
-      console.log('[auto-save] payload:', JSON.stringify(payload, null, 2));
       await api.put(KEY, payload);
       await mutate(KEY);
       toast({ title: 'Profile updated', description: 'Resume data saved to your profile.' });
@@ -400,9 +409,46 @@ export default function SettingsPage() {
       const msg = (err != null && typeof err === 'object' && 'message' in err)
         ? String((err as { message: unknown }).message)
         : String(err);
-      console.error('[auto-save] failed:', err);
       toast({ title: 'Auto-save failed', description: msg, variant: 'destructive' });
     }
+  }
+
+  async function autoSaveAppInfo(f: FormState) {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    setAutoSaved(false);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      setAutoSaving(true);
+      try {
+        await api.put(KEY, {
+          displayName: [f.firstName, f.lastName].filter(Boolean).join(' ') || f.displayName || null,
+          phone: f.phone || null,
+          linkedinUrl: validUrl(f.linkedinUrl),
+          githubUrl: validUrl(f.githubUrl),
+          websiteUrl: validUrl(f.websiteUrl),
+          applyEmail: validEmail(f.applyEmail) ?? validEmail(me?.email) ?? null,
+          locations: f.location ? [...new Set([f.location, ...f.locations])] : f.locations,
+          headline: f.headline || null,
+          summary: f.summary || null,
+          yearsOfExperience: f.yearsOfExperience ? Number(f.yearsOfExperience) : null,
+          workExperience: f.workExperience.map((e) => ({ ...e, description: (e.description ?? '').slice(0, 950) })),
+          education: f.education.map((e) => ({ ...e, institution: (e.institution ?? '').slice(0, 190), degree: (e.degree ?? '').slice(0, 190), field: (e.field ?? '').slice(0, 190) })),
+          earliestStartDate: f.earliestStartDate || null,
+          willingToRelocate: f.willingToRelocate,
+          preferredPronouns: f.preferredPronouns || null,
+          ethnicity: f.ethnicity || null,
+          veteranStatus: f.veteranStatus || null,
+          disabilityStatus: f.disabilityStatus || null,
+        });
+        await mutate(KEY);
+        setAutoSaved(true);
+        setTimeout(() => setAutoSaved(false), 2500);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast({ title: 'Auto-save failed', description: msg, variant: 'destructive' });
+      } finally {
+        setAutoSaving(false);
+      }
+    }, 1200);
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -446,7 +492,6 @@ export default function SettingsPage() {
       toast({ title: 'Profile saved' });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[handleSave] failed:', msg, err);
       toast({ title: 'Failed to save', description: msg, variant: 'destructive' });
     } finally {
       setSaving(false);
@@ -708,14 +753,23 @@ export default function SettingsPage() {
 
             {/* ── Application Info tab ── */}
             {activeTab === 'appinfo' && (
-              <Section title="Application Info" description="Autofilled from your resume. Used to fill out job applications instantly.">
+              <Section
+                title="Application Info"
+                description="Autofilled from your resume. Used to fill out job applications instantly."
+                headerRight={
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {autoSaving && <><Loader2 className="h-3 w-3 animate-spin" />Saving…</>}
+                    {!autoSaving && autoSaved && <><CheckCircle2 className="h-3 w-3 text-green-500" />Saved</>}
+                  </span>
+                }
+              >
 
                 {/* ── Personal info ── */}
                 <div className="grid grid-cols-2 gap-4">
                   <FieldRow label="First name">
                     <TextInput
                       value={form.firstName}
-                      onChange={(v) => setForm({ ...form, firstName: v })}
+                      onChange={(v) => { const f = { ...form, firstName: v }; setForm(f); autoSaveAppInfo(f); }}
                       placeholder="Jane"
                       highlighted={resumeFromFields.includes('firstName')}
                     />
@@ -723,7 +777,7 @@ export default function SettingsPage() {
                   <FieldRow label="Last name">
                     <TextInput
                       value={form.lastName}
-                      onChange={(v) => setForm({ ...form, lastName: v })}
+                      onChange={(v) => { const f = { ...form, lastName: v }; setForm(f); autoSaveAppInfo(f); }}
                       placeholder="Smith"
                       highlighted={resumeFromFields.includes('lastName')}
                     />
@@ -734,7 +788,7 @@ export default function SettingsPage() {
                   <FieldRow label="Email">
                     <TextInput
                       value={form.applyEmail}
-                      onChange={(v) => setForm({ ...form, applyEmail: v })}
+                      onChange={(v) => { const f = { ...form, applyEmail: v }; setForm(f); autoSaveAppInfo(f); }}
                       placeholder="jane@example.com"
                       icon={<Mail className="h-4 w-4" />}
                       highlighted={resumeFromFields.includes('applyEmail')}
@@ -743,7 +797,7 @@ export default function SettingsPage() {
                   <FieldRow label="Phone number">
                     <TextInput
                       value={form.phone}
-                      onChange={(v) => setForm({ ...form, phone: formatPhone(v) })}
+                      onChange={(v) => { const f = { ...form, phone: formatPhone(v) }; setForm(f); autoSaveAppInfo(f); }}
                       placeholder="+1 (416) 555-0100"
                       highlighted={resumeFromFields.includes('phone')}
                     />
@@ -751,11 +805,10 @@ export default function SettingsPage() {
                 </div>
 
                 <FieldRow label="Location" hint="City, Province / State">
-                  <TextInput
+                  <CityInput
                     value={form.location}
-                    onChange={(v) => setForm({ ...form, location: v })}
+                    onChange={(v) => { const f = { ...form, location: v }; setForm(f); autoSaveAppInfo(f); }}
                     placeholder="Toronto, ON"
-                    icon={<Globe className="h-4 w-4" />}
                     highlighted={resumeFromFields.includes('location')}
                   />
                 </FieldRow>
@@ -767,7 +820,7 @@ export default function SettingsPage() {
                     <FieldRow label="LinkedIn">
                       <TextInput
                         value={form.linkedinUrl}
-                        onChange={(v) => setForm({ ...form, linkedinUrl: v })}
+                        onChange={(v) => { const f = { ...form, linkedinUrl: v }; setForm(f); autoSaveAppInfo(f); }}
                         placeholder="https://linkedin.com/in/janesmith"
                         icon={<Linkedin className="h-4 w-4" />}
                         highlighted={resumeFromFields.includes('linkedinUrl')}
@@ -776,7 +829,7 @@ export default function SettingsPage() {
                     <FieldRow label="GitHub">
                       <TextInput
                         value={form.githubUrl}
-                        onChange={(v) => setForm({ ...form, githubUrl: v })}
+                        onChange={(v) => { const f = { ...form, githubUrl: v }; setForm(f); autoSaveAppInfo(f); }}
                         placeholder="https://github.com/janesmith"
                         icon={<Github className="h-4 w-4" />}
                         highlighted={resumeFromFields.includes('githubUrl')}
@@ -785,7 +838,7 @@ export default function SettingsPage() {
                     <FieldRow label="Website / Portfolio">
                       <TextInput
                         value={form.websiteUrl}
-                        onChange={(v) => setForm({ ...form, websiteUrl: v })}
+                        onChange={(v) => { const f = { ...form, websiteUrl: v }; setForm(f); autoSaveAppInfo(f); }}
                         placeholder="https://janesmith.dev"
                         icon={<Link2 className="h-4 w-4" />}
                         highlighted={resumeFromFields.includes('websiteUrl')}
@@ -799,13 +852,14 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Work Experience</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Auto-filled from resume · edit any entry below</p>
                     </div>
                   </div>
                   <WorkExperienceEditor
                     entries={form.workExperience}
                     fromResume={resumeFromFields.includes('workExperience')}
-                    onChange={(entries) => setForm({ ...form, workExperience: entries })}
+                    onChange={(entries) => { const f = { ...form, workExperience: entries }; setForm(f); autoSaveAppInfo(f); }}
+                    collapsed={workCollapsed}
+                    onCollapsedChange={setWorkCollapsed}
                   />
                 </div>
 
@@ -814,13 +868,14 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Education</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Auto-filled from resume · edit any entry below</p>
                     </div>
                   </div>
                   <EducationEditor
                     entries={form.education}
                     fromResume={resumeFromFields.includes('education')}
-                    onChange={(entries) => setForm({ ...form, education: entries })}
+                    onChange={(entries) => { const f = { ...form, education: entries }; setForm(f); autoSaveAppInfo(f); }}
+                    collapsed={eduCollapsed}
+                    onCollapsedChange={setEduCollapsed}
                   />
                 </div>
 
@@ -833,7 +888,7 @@ export default function SettingsPage() {
                     <FieldRow label="Gender identity">
                       <select
                         value={form.preferredPronouns}
-                        onChange={(e) => setForm({ ...form, preferredPronouns: e.target.value })}
+                        onChange={(e) => { const f = { ...form, preferredPronouns: e.target.value }; setForm(f); autoSaveAppInfo(f); }}
                         className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
                       >
                         <option value="">Prefer not to say</option>
@@ -847,7 +902,7 @@ export default function SettingsPage() {
                     <FieldRow label="Race / Ethnicity">
                       <select
                         value={form.ethnicity}
-                        onChange={(e) => setForm({ ...form, ethnicity: e.target.value })}
+                        onChange={(e) => { const f = { ...form, ethnicity: e.target.value }; setForm(f); autoSaveAppInfo(f); }}
                         className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
                       >
                         <option value="">Prefer not to say</option>
@@ -866,7 +921,7 @@ export default function SettingsPage() {
                     <FieldRow label="Veteran status">
                       <select
                         value={form.veteranStatus}
-                        onChange={(e) => setForm({ ...form, veteranStatus: e.target.value })}
+                        onChange={(e) => { const f = { ...form, veteranStatus: e.target.value }; setForm(f); autoSaveAppInfo(f); }}
                         className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
                       >
                         <option value="">Prefer not to say</option>
@@ -878,7 +933,7 @@ export default function SettingsPage() {
                     <FieldRow label="Disability status">
                       <select
                         value={form.disabilityStatus}
-                        onChange={(e) => setForm({ ...form, disabilityStatus: e.target.value })}
+                        onChange={(e) => { const f = { ...form, disabilityStatus: e.target.value }; setForm(f); autoSaveAppInfo(f); }}
                         className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
                       >
                         <option value="">Prefer not to say</option>
@@ -889,7 +944,6 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <SaveBar saving={saving} />
               </Section>
             )}
 
@@ -1165,6 +1219,58 @@ export default function SettingsPage() {
             {/* ── Keywords tab ── */}
             {activeTab === 'keywords' && (
               <Section title="Keywords" description="Fine-tune which jobs get surfaced and which get hidden.">
+                {/* ── Suggestions from resume ── */}
+                {(() => {
+                  const addedLower = new Set(form.keywords.map((k) => k.toLowerCase()));
+                  const pending = suggestedKeywords.filter(
+                    (k) => !dismissedKeywords.has(k) && !addedLower.has(k.toLowerCase()),
+                  );
+                  if (pending.length === 0) return null;
+                  return (
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium">Suggested from resume</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setForm((f) => ({ ...f, keywords: [...new Set([...f.keywords, ...pending])] }));
+                            setSuggestedKeywords([]);
+                          }}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Accept all
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {pending.map((kw) => (
+                          <span
+                            key={kw}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium"
+                          >
+                            {kw}
+                            <button
+                              type="button"
+                              title="Add keyword"
+                              onClick={() => setForm((f) => ({ ...f, keywords: [...new Set([...f.keywords, kw])] }))}
+                              className="rounded-sm text-primary hover:opacity-80 transition-opacity"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Dismiss suggestion"
+                              onClick={() => setDismissedKeywords((prev) => new Set([...prev, kw]))}
+                              className="rounded-sm text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <FieldRow
                   label="Include keywords"
                   hint="Jobs matching these terms get a score boost"
@@ -1319,72 +1425,210 @@ function MonthYearPicker({ value, onChange, placeholder }: { value: string; onCh
   );
 }
 
+function WorkEntryCard({
+  entry, index, fromResume, isCollapsed, isDescFocused,
+  onToggle, onRemove, onUpdate, onDescFocus, onDescBlur,
+}: {
+  entry: WorkEntry; index: number; fromResume: boolean; isCollapsed: boolean; isDescFocused: boolean;
+  onToggle: () => void; onRemove: () => void;
+  onUpdate: (field: keyof WorkEntry, val: string) => void;
+  onDescFocus: () => void; onDescBlur: () => void;
+}) {
+  const bodyRef = React.useRef<HTMLDivElement>(null);
+  const isFirstRender = React.useRef(true);
+  const isCurrent = entry.endDate === 'Present';
+  const summaryTitle = [entry.title, entry.company].filter(Boolean).join(' @ ') || `Entry ${index + 1}`;
+  const cardBorder = fromResume && index === 0 ? 'border-primary/40 bg-primary/5' : 'border-border bg-card';
+
+  React.useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.style.overflow = 'hidden';
+    if (isCollapsed) {
+      el.style.height = '0px';
+      el.style.opacity = '0';
+    } else {
+      el.style.height = 'auto';
+      el.style.opacity = '1';
+    }
+    isFirstRender.current = false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  React.useEffect(() => {
+    if (isFirstRender.current) return;
+    const el = bodyRef.current;
+    if (!el) return;
+
+    if (isCollapsed) {
+      const h = el.scrollHeight;
+      el.style.transition = 'none';
+      el.style.height = h + 'px';
+      el.style.overflow = 'hidden';
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          el.style.transition = 'height 220ms cubic-bezier(0.4,0,0.2,1), opacity 180ms ease';
+          el.style.height = '0px';
+          el.style.opacity = '0';
+        });
+      });
+    } else {
+      el.style.transition = 'none';
+      el.style.overflow = 'hidden';
+      el.style.height = '0px';
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const h = el.scrollHeight;
+          el.style.transition = 'height 220ms cubic-bezier(0.4,0,0.2,1), opacity 200ms ease';
+          el.style.height = h + 'px';
+          el.style.opacity = '1';
+          const onEnd = () => {
+            el.style.height = 'auto';
+            el.removeEventListener('transitionend', onEnd);
+          };
+          el.addEventListener('transitionend', onEnd);
+        });
+      });
+    }
+  }, [isCollapsed]);
+
+  return (
+    <div className={cn('rounded-xl border', cardBorder)}>
+      {/* ── Header ── */}
+      <div className="flex items-center gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex-1 flex items-center gap-2 text-left min-w-0 outline-none focus-visible:outline-none"
+        >
+          <ChevronDown
+            className={cn(
+              'h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-220',
+              isCollapsed && '-rotate-90',
+            )}
+          />
+          <span className="text-sm font-medium truncate">{summaryTitle}</span>
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded-md p-1 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* ── Body (height animated via ref) ── */}
+      <div
+        ref={bodyRef}
+        style={{ willChange: 'height' }}
+      >
+        <div className="px-4 pb-4 space-y-3 pt-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Job title</label>
+              <input value={entry.title} onChange={(ev) => onUpdate('title', ev.target.value)} placeholder="Software Engineer" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Company</label>
+              <CompanyInput value={entry.company} onChange={(val) => onUpdate('company', val)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Start date</label>
+              <MonthYearPicker value={entry.startDate} onChange={(v) => onUpdate('startDate', v)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">End date</label>
+              {isCurrent ? (
+                <div className="flex items-center h-[38px] px-3 rounded-lg border border-input bg-background text-sm text-muted-foreground">Present</div>
+              ) : (
+                <MonthYearPicker value={entry.endDate} onChange={(v) => onUpdate('endDate', v)} />
+              )}
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isCurrent}
+              onChange={(ev) => onUpdate('endDate', ev.target.checked ? 'Present' : '')}
+              className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+            />
+            <span className="text-xs text-muted-foreground">I currently work here</span>
+          </label>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Description</label>
+            <textarea
+              value={entry.description}
+              onChange={(ev) => onUpdate('description', ev.target.value)}
+              onFocus={onDescFocus}
+              onBlur={onDescBlur}
+              placeholder="Key responsibilities and achievements…"
+              className={cn(
+                'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background resize-none transition-all duration-200 ease-in-out',
+                isDescFocused ? 'min-h-[9rem]' : 'min-h-[4.5rem]',
+              )}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WorkExperienceEditor({
-  entries, fromResume, onChange,
-}: { entries: WorkEntry[]; fromResume: boolean; onChange: (e: WorkEntry[]) => void }) {
+  entries, fromResume, onChange, collapsed: collapsedProp, onCollapsedChange,
+}: { entries: WorkEntry[]; fromResume: boolean; onChange: (e: WorkEntry[]) => void; collapsed: boolean[]; onCollapsedChange: (c: boolean[]) => void }) {
+  const collapsed = React.useMemo(() => {
+    const arr = [...collapsedProp];
+    while (arr.length < entries.length) arr.push(false);
+    return arr.slice(0, entries.length);
+  }, [collapsedProp, entries.length]);
+  const [descFocused, setDescFocused] = React.useState<boolean[]>(() => entries.map(() => false));
+
+  React.useEffect(() => {
+    setDescFocused((prev) => {
+      const next = [...prev];
+      while (next.length < entries.length) next.push(false);
+      return next.slice(0, entries.length);
+    });
+  }, [entries.length]);
+
   function update(i: number, field: keyof WorkEntry, val: string) {
     const next = entries.map((e, idx) => idx === i ? { ...e, [field]: val } : e);
     onChange(next);
   }
-  function remove(i: number) { onChange(entries.filter((_, idx) => idx !== i)); }
-  function add() { onChange([...entries, { ...BLANK_WORK }]); }
+  function remove(i: number) {
+    onChange(entries.filter((_, idx) => idx !== i));
+    onCollapsedChange(collapsed.filter((_, idx) => idx !== i));
+    setDescFocused((prev) => prev.filter((_, idx) => idx !== i));
+  }
+  function add() {
+    onChange([...entries, { ...BLANK_WORK }]);
+    onCollapsedChange([...collapsed, false]);
+    setDescFocused((prev) => [...prev, false]);
+  }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {entries.length === 0 && (
         <p className="text-sm text-muted-foreground italic">No work experience yet — upload a resume or add manually.</p>
       )}
-      {entries.map((e, i) => {
-        const isCurrent = e.endDate === 'Present';
-        return (
-          <div key={i} className={cn('rounded-xl border p-4 space-y-3', fromResume && i === 0 ? 'border-primary/40 bg-primary/5' : 'border-border bg-card')}>
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-medium">{e.title || e.company || `Entry ${i + 1}`}</p>
-              <button type="button" onClick={() => remove(i)} className="rounded-md p-1 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Job title</label>
-                <input value={e.title} onChange={(ev) => update(i, 'title', ev.target.value)} placeholder="Software Engineer" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Company</label>
-                <CompanyInput value={e.company} onChange={(val) => update(i, 'company', val)} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Start date</label>
-                <MonthYearPicker value={e.startDate} onChange={(v) => update(i, 'startDate', v)} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">End date</label>
-                {isCurrent ? (
-                  <div className="flex items-center h-[38px] px-3 rounded-lg border border-input bg-background text-sm text-muted-foreground">
-                    Present
-                  </div>
-                ) : (
-                  <MonthYearPicker value={e.endDate} onChange={(v) => update(i, 'endDate', v)} />
-                )}
-              </div>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isCurrent}
-                onChange={(ev) => update(i, 'endDate', ev.target.checked ? 'Present' : '')}
-                className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
-              />
-              <span className="text-xs text-muted-foreground">I currently work here</span>
-            </label>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Description</label>
-              <textarea value={e.description} onChange={(ev) => update(i, 'description', ev.target.value)} placeholder="Key responsibilities and achievements…" rows={2} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors resize-none" />
-            </div>
-          </div>
-        );
-      })}
-      <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors w-full justify-center">
+      {entries.map((e, i) => (
+        <WorkEntryCard
+          key={i}
+          entry={e}
+          index={i}
+          fromResume={fromResume}
+          isCollapsed={collapsed[i] ?? false}
+          isDescFocused={descFocused[i] ?? false}
+          onToggle={() => onCollapsedChange(collapsed.map((v, idx) => idx === i ? !v : v))}
+          onRemove={() => remove(i)}
+          onUpdate={(field, val) => update(i, field, val)}
+          onDescFocus={() => setDescFocused((prev) => prev.map((v, idx) => idx === i ? true : v))}
+          onDescBlur={() => setDescFocused((prev) => prev.map((v, idx) => idx === i ? false : v))}
+        />
+      ))}
+      <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors w-full justify-center mt-1">
         <Plus className="h-3.5 w-3.5" />
         Add work experience
       </button>
@@ -1392,54 +1636,163 @@ function WorkExperienceEditor({
   );
 }
 
+function EduEntryCard({
+  entry, index, fromResume, isCollapsed, onToggle, onRemove, onUpdate,
+}: {
+  entry: EducationEntry; index: number; fromResume: boolean; isCollapsed: boolean;
+  onToggle: () => void; onRemove: () => void;
+  onUpdate: (field: keyof EducationEntry, val: string) => void;
+}) {
+  const bodyRef = React.useRef<HTMLDivElement>(null);
+  const isFirstRender = React.useRef(true);
+  const cardBorder = fromResume && index === 0 ? 'border-primary/40 bg-primary/5' : 'border-border bg-card';
+  const summaryTitle = entry.institution || `Entry ${index + 1}`;
+
+  React.useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.style.overflow = 'hidden';
+    if (isCollapsed) {
+      el.style.height = '0px';
+      el.style.opacity = '0';
+    } else {
+      el.style.height = 'auto';
+      el.style.opacity = '1';
+    }
+    isFirstRender.current = false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  React.useEffect(() => {
+    if (isFirstRender.current) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    if (isCollapsed) {
+      const h = el.scrollHeight;
+      el.style.transition = 'none';
+      el.style.height = h + 'px';
+      el.style.overflow = 'hidden';
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          el.style.transition = 'height 220ms cubic-bezier(0.4,0,0.2,1), opacity 180ms ease';
+          el.style.height = '0px';
+          el.style.opacity = '0';
+        });
+      });
+    } else {
+      el.style.transition = 'none';
+      el.style.overflow = 'hidden';
+      el.style.height = '0px';
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const h = el.scrollHeight;
+          el.style.transition = 'height 220ms cubic-bezier(0.4,0,0.2,1), opacity 200ms ease';
+          el.style.height = h + 'px';
+          el.style.opacity = '1';
+          const onEnd = () => { el.style.height = 'auto'; el.removeEventListener('transitionend', onEnd); };
+          el.addEventListener('transitionend', onEnd);
+        });
+      });
+    }
+  }, [isCollapsed]);
+
+  return (
+    <div className={cn('rounded-xl border', cardBorder)}>
+      {/* ── Header ── */}
+      <div className="flex items-center gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex-1 flex items-center gap-2 text-left min-w-0 outline-none focus-visible:outline-none"
+        >
+          <ChevronDown
+            className={cn(
+              'h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-220',
+              isCollapsed && '-rotate-90',
+            )}
+          />
+          <span className="text-sm font-medium truncate">{summaryTitle}</span>
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded-md p-1 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* ── Body (height animated via ref) ── */}
+      <div ref={bodyRef} style={{ willChange: 'height' }}>
+        <div className="px-4 pb-4 space-y-3 pt-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2 space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Institution</label>
+              <UniversityAutocomplete value={entry.institution} onChange={(val) => onUpdate('institution', val)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Degree</label>
+              <input value={entry.degree} onChange={(ev) => onUpdate('degree', ev.target.value)} placeholder="Bachelor of Science" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Field of study</label>
+              <input value={entry.field} onChange={(ev) => onUpdate('field', ev.target.value)} placeholder="Computer Science" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Start year</label>
+              <input value={entry.startYear} onChange={(ev) => onUpdate('startYear', ev.target.value)} placeholder="2018" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Graduation year</label>
+              <input value={entry.endYear} onChange={(ev) => onUpdate('endYear', ev.target.value)} placeholder="2022" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EducationEditor({
-  entries, fromResume, onChange,
-}: { entries: EducationEntry[]; fromResume: boolean; onChange: (e: EducationEntry[]) => void }) {
+  entries, fromResume, onChange, collapsed: collapsedProp, onCollapsedChange,
+}: { entries: EducationEntry[]; fromResume: boolean; onChange: (e: EducationEntry[]) => void; collapsed: boolean[]; onCollapsedChange: (c: boolean[]) => void }) {
+  const collapsed = React.useMemo(() => {
+    const arr = [...collapsedProp];
+    while (arr.length < entries.length) arr.push(false);
+    return arr.slice(0, entries.length);
+  }, [collapsedProp, entries.length]);
+
   function update(i: number, field: keyof EducationEntry, val: string) {
     const next = entries.map((e, idx) => idx === i ? { ...e, [field]: val } : e);
     onChange(next);
   }
-  function remove(i: number) { onChange(entries.filter((_, idx) => idx !== i)); }
-  function add() { onChange([...entries, { ...BLANK_EDU }]); }
+  function remove(i: number) {
+    onChange(entries.filter((_, idx) => idx !== i));
+    onCollapsedChange(collapsed.filter((_, idx) => idx !== i));
+  }
+  function add() {
+    onChange([...entries, { ...BLANK_EDU }]);
+    onCollapsedChange([...collapsed, false]);
+  }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {entries.length === 0 && (
         <p className="text-sm text-muted-foreground italic">No education yet — upload a resume or add manually.</p>
       )}
       {entries.map((e, i) => (
-        <div key={i} className={cn('rounded-xl border p-4 space-y-3', fromResume && i === 0 ? 'border-primary/40 bg-primary/5' : 'border-border bg-card')}>
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium">{e.institution || `Entry ${i + 1}`}</p>
-            <button type="button" onClick={() => remove(i)} className="rounded-md p-1 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="col-span-2 space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Institution</label>
-              <UniversityAutocomplete value={e.institution} onChange={(val) => update(i, 'institution', val)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Degree</label>
-              <input value={e.degree} onChange={(ev) => update(i, 'degree', ev.target.value)} placeholder="Bachelor of Science" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Field of study</label>
-              <input value={e.field} onChange={(ev) => update(i, 'field', ev.target.value)} placeholder="Computer Science" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Start year</label>
-              <input value={e.startYear} onChange={(ev) => update(i, 'startYear', ev.target.value)} placeholder="2018" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Graduation year</label>
-              <input value={e.endYear} onChange={(ev) => update(i, 'endYear', ev.target.value)} placeholder="2022" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors" />
-            </div>
-          </div>
-        </div>
+        <EduEntryCard
+          key={i}
+          entry={e}
+          index={i}
+          fromResume={fromResume}
+          isCollapsed={collapsed[i] ?? false}
+          onToggle={() => onCollapsedChange(collapsed.map((v, idx) => idx === i ? !v : v))}
+          onRemove={() => remove(i)}
+          onUpdate={(field, val) => update(i, field, val)}
+        />
       ))}
-      <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors w-full justify-center">
+      <button type="button" onClick={add} className="flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors w-full justify-center mt-1">
         <Plus className="h-3.5 w-3.5" />
         Add education
       </button>
@@ -1447,11 +1800,14 @@ function EducationEditor({
   );
 }
 
-function Section({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+function Section({ title, description, children, headerRight }: { title: string; description: string; children: React.ReactNode; headerRight?: React.ReactNode }) {
   return (
     <div className="space-y-6">
       <div className="pb-4 border-b border-border">
-        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+          {headerRight && <div>{headerRight}</div>}
+        </div>
         <p className="text-sm text-muted-foreground mt-1">{description}</p>
       </div>
       <div className="space-y-5">{children}</div>
@@ -1590,6 +1946,7 @@ function DataSection() {
       setRefreshing(false);
     }
   }
+
 
   function formatLastFetched(iso: string | null | undefined): string {
     if (!iso) return 'Never';

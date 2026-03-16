@@ -251,6 +251,10 @@ export default function JobsPage() {
   const [selectedLocations, setSelectedLocations] = React.useState<string[]>([]);
   const [prioritizeWatchlist, setPrioritizeWatchlist] = React.useState(false);
 
+  // Client-side cache of resolved ATS URLs keyed by job ID.
+  // Pre-warmed in background when pagedJobs changes so Apply clicks are instant.
+  const resolvedUrlCache = React.useRef<Map<string, string>>(new Map());
+
   // Apply profile defaults once loaded
   React.useEffect(() => {
     if (!profile || profileDefaultsApplied) return;
@@ -553,6 +557,7 @@ export default function JobsPage() {
                       onClick={() => setSelectedJob(selectedJob?.id === job.id ? null : job)}
                       onQuickApply={handleQuickApply}
                       isWatched={!!watchlistData?.items?.some((i) => i.itemType === 'company' && i.value.toLowerCase() === job.company.toLowerCase())}
+                      resolvedUrls={resolvedUrlCache.current}
                     />
                   ))}
                 </div>
@@ -580,7 +585,7 @@ export default function JobsPage() {
 
       {/* Job detail slide-over */}
       {selectedJob && (
-        <JobDetailPanel job={selectedJob} onClose={() => setSelectedJob(null)} onQuickApply={handleQuickApply} />
+        <JobDetailPanel job={selectedJob} onClose={() => setSelectedJob(null)} onQuickApply={handleQuickApply} resolvedUrls={resolvedUrlCache.current} />
       )}
 
     </div>
@@ -1058,11 +1063,12 @@ function PopoverCheckItem({ label, checked, onChange }: {
 
 // ─── Apply button (resolves LinkedIn → ATS URL) ───────────────────────────────
 
-function ApplyButton({ job, className, label = 'Apply', iconSize = 'h-3 w-3' }: {
+function ApplyButton({ job, className, label = 'Apply', iconSize = 'h-3 w-3', resolvedUrls }: {
   job: Job;
   className?: string;
   label?: string;
   iconSize?: string;
+  resolvedUrls?: Map<string, string>;
 }) {
   const [resolving, setResolving] = React.useState(false);
 
@@ -1075,12 +1081,29 @@ function ApplyButton({ job, className, label = 'Apply', iconSize = 'h-3 w-3' }: 
       return;
     }
 
+    // Check client-side pre-warm cache first — avoids any network round-trip.
+    // Cached value may be an ATS URL or a linkedin.com/jobs/view/ (Easy Apply).
+    const cached = resolvedUrls?.get(job.id);
+    if (cached) {
+      window.open(cached, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    // Open a blank window synchronously so browsers don't block the popup.
+    // For Easy Apply jobs the resolver is fast (~1 fetch), so the blank flash
+    // is minimal. For offsite ATS this avoids the popup blocker on slow resolves.
+    const win = window.open('', '_blank', 'noopener,noreferrer');
+
     setResolving(true);
     try {
       const result = await api.get<{ applyUrl: string }>(`/api/jobs/${job.id}/resolve-apply-url`);
-      window.open(result.applyUrl, '_blank', 'noopener,noreferrer');
+      const resolvedUrl = result.applyUrl ?? job.applyUrl;
+      resolvedUrls?.set(job.id, resolvedUrl);
+      if (win) win.location.href = resolvedUrl;
+      else window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
     } catch {
-      window.open(job.applyUrl, '_blank', 'noopener,noreferrer');
+      if (win) win.location.href = job.applyUrl;
+      else window.open(job.applyUrl, '_blank', 'noopener,noreferrer');
     } finally {
       setResolving(false);
     }
@@ -1096,7 +1119,7 @@ function ApplyButton({ job, className, label = 'Apply', iconSize = 'h-3 w-3' }: 
 
 // ─── Job card ─────────────────────────────────────────────────────────────────
 
-function JobCard({ job, selected, onClick, onQuickApply, isWatched }: { job: Job; selected: boolean; onClick: () => void; onQuickApply: (jobId: string) => void; isWatched?: boolean }) {
+function JobCard({ job, selected, onClick, onQuickApply, isWatched, resolvedUrls }: { job: Job; selected: boolean; onClick: () => void; onQuickApply: (jobId: string) => void; isWatched?: boolean; resolvedUrls?: Map<string, string> }) {
   return (
     <div
       onClick={onClick}
@@ -1142,7 +1165,7 @@ function JobCard({ job, selected, onClick, onQuickApply, isWatched }: { job: Job
           )}
           <SourceBadge source={job.sourceType} />
           <div className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            <ApplyButton job={job} className="flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium hover:bg-accent transition-colors" />
+            <ApplyButton job={job} className="flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium hover:bg-accent transition-colors" {...(resolvedUrls ? { resolvedUrls } : {})} />
             <button
               onClick={(e) => { e.stopPropagation(); onQuickApply(job.id); }}
               className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
@@ -1258,7 +1281,7 @@ function extractSalaryFromText(text: string): ParsedSalary {
 
 // ─── Job detail slide-over ────────────────────────────────────────────────────
 
-function JobDetailPanel({ job, onClose, onQuickApply }: { job: Job; onClose: () => void; onQuickApply: (jobId: string) => void }) {
+function JobDetailPanel({ job, onClose, onQuickApply, resolvedUrls }: { job: Job; onClose: () => void; onQuickApply: (jobId: string) => void; resolvedUrls?: Map<string, string> }) {
   const { data: salary, isLoading: salaryLoading } = useSWR<SalaryData>(
     `/api/jobs/salary?title=${encodeURIComponent(job.title)}&location=${encodeURIComponent(job.location)}&jobId=${job.id}`,
     (url: string) => api.get<SalaryData>(url),
@@ -1278,7 +1301,18 @@ function JobDetailPanel({ job, onClose, onQuickApply }: { job: Job; onClose: () 
     [descriptionText],
   );
 
-  const keywords = React.useMemo(() => extractKeywords(descriptionText), [descriptionText]);
+  const { data: llmKeywordsData } = useSWR<{ keywords: string[] }>(
+    descriptionText ? ['keywords-extract', job.id] : null,
+    () => fetch('/api/keywords/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: descriptionText.slice(0, 6000) }),
+    }).then((r) => r.ok ? r.json() : { keywords: [] }),
+    { revalidateOnFocus: false, revalidateOnReconnect: false },
+  );
+  const keywords = llmKeywordsData?.keywords?.length
+    ? llmKeywordsData.keywords
+    : extractKeywords(descriptionText);
 
   const salaryFromDesc = React.useMemo<ParsedSalary>(() => extractSalaryFromText(descriptionText), [descriptionText]);
 
@@ -1357,7 +1391,7 @@ function JobDetailPanel({ job, onClose, onQuickApply }: { job: Job; onClose: () 
           {job.postedAt && (
             <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{formatRelativeTime(job.postedAt)}</span>
           )}
-          <SourceBadge source={job.sourceType} />
+          <SourceBadge source={job.sourceType} {...(job.jobUrl ? { href: job.jobUrl } : {})} />
         </div>
 
         {/* Salary card */}
@@ -1430,7 +1464,7 @@ function JobDetailPanel({ job, onClose, onQuickApply }: { job: Job; onClose: () 
 
         {/* Footer CTA */}
         <div className="p-4 border-t border-border flex items-center gap-3 bg-background">
-          <ApplyButton job={job} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-border bg-background py-2.5 text-sm font-medium hover:bg-accent transition-colors" label="View posting" iconSize="h-4 w-4" />
+          <ApplyButton job={job} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-border bg-background py-2.5 text-sm font-medium hover:bg-accent transition-colors" label="View posting" iconSize="h-4 w-4" {...(resolvedUrls ? { resolvedUrls } : {})} />
           <button
             onClick={() => onQuickApply(job.id)}
             className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
@@ -1464,12 +1498,30 @@ function WorkplaceBadge({ type }: { type: string | null }) {
   return <Badge variant="outline">{map[type] ?? type}</Badge>;
 }
 
-function SourceBadge({ source }: { source: string }) {
+function SourceBadge({ source, href }: { source: string; href?: string }) {
   const meta = SOURCE_META[source?.toLowerCase()] ?? { label: source, color: 'text-muted-foreground' };
-  return (
-    <span className={cn('flex items-center gap-1 font-medium shrink-0', meta.color)}>
+  const inner = (
+    <>
       <Radio className="h-2.5 w-2.5" />
       {meta.label}
+    </>
+  );
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className={cn('flex items-center gap-1 font-medium shrink-0 hover:underline', meta.color)}
+      >
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <span className={cn('flex items-center gap-1 font-medium shrink-0', meta.color)}>
+      {inner}
     </span>
   );
 }

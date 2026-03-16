@@ -14,8 +14,9 @@ import { watchlist } from './routes/watchlist.js';
 import { notifications } from './routes/notifications.js';
 import { runCronTick } from './cron/tick.js';
 import { SEARCH_QUERIES, MAX_QUERIES } from './connectors/linkedin_scraper.js';
-import { eq } from 'drizzle-orm';
+import { eq, like } from 'drizzle-orm';
 import { attemptApply } from './applicators/index.js';
+import { resolveLinkedInApplyUrl } from './applicators/browser.js';
 import type { Env, Variables } from './types.js';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -137,6 +138,46 @@ app.post('/api/admin/refresh', async (c) => {
     return c.json({ ok: true });
   } catch (err) {
     console.error('[admin/refresh] error:', err);
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
+// ─── Admin: backfill LinkedIn apply URLs for existing DB rows ────────────────
+
+app.post('/api/admin/backfill-linkedin-urls', async (c) => {
+  const db = c.get('db');
+  try {
+    const liJobs = await db.query.jobs.findMany({
+      where: like(schema.jobs.applyUrl, 'https://www.linkedin.com%'),
+      columns: { id: true, jobUrl: true, applyUrl: true },
+    });
+
+    console.log(`[backfill] found ${liJobs.length} jobs with LinkedIn applyUrl`);
+
+    let updated = 0;
+    const BATCH = 5;
+
+    for (let i = 0; i < liJobs.length; i += BATCH) {
+      const batch = liJobs.slice(i, i + BATCH);
+      await Promise.all(batch.map(async (job) => {
+        try {
+          const resolved = await resolveLinkedInApplyUrl(job.jobUrl);
+          if (resolved && resolved !== job.applyUrl) {
+            await db.update(schema.jobs)
+              .set({ applyUrl: resolved })
+              .where(eq(schema.jobs.id, job.id));
+            updated++;
+            console.log(`[backfill] updated job ${job.id}: ${resolved.slice(0, 80)}`);
+          }
+        } catch (err) {
+          console.error(`[backfill] failed for job ${job.id}:`, err);
+        }
+      }));
+    }
+
+    return c.json({ total: liJobs.length, updated });
+  } catch (err) {
+    console.error('[backfill] error:', err);
     return c.json({ error: String(err) }, 500);
   }
 });

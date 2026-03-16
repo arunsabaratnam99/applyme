@@ -734,7 +734,24 @@ export async function POST(req: NextRequest) {
     const headline       = inferHeadline(lines, nameIdx >= 0 ? nameIdx : 0);
     const summary        = inferSummary(lines);
     const roles          = inferRoles(text);
-    const keywords       = inferKeywords(text);
+
+    // Try LLM extraction first; fall back to static list on failure
+    let keywords: string[] = inferKeywords(text);
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000';
+      const kwRes = await fetch(`${baseUrl}/api/keywords/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text.slice(0, 6000) }),
+      });
+      if (kwRes.ok) {
+        const kwData = (await kwRes.json()) as { keywords?: string[] };
+        if (kwData.keywords?.length) keywords = kwData.keywords;
+      }
+    } catch {
+      // fallback already set
+    }
+
     const locations      = inferLocations(text);
     const location       = locations[0] ?? undefined;
     const workExperience = inferWorkExperience(lines);

@@ -154,23 +154,38 @@ export function CompanyInput({ value, onChange, placeholder = 'Acme Corp', class
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = React.useRef<AbortController | null>(null);
   // Stores logo for companies from live API not in static list
-  const logoOverrideRef = React.useRef<string | null>(null);
+  const [logoOverride, setLogoOverride] = React.useState<string | null>(null);
 
-  // Sync external value (e.g. resume autofill)
+  // Sync external value (e.g. resume autofill) and restore logo
   React.useEffect(() => {
     setQuery(value);
-    // Clear override when value changes externally
-    logoOverrideRef.current = null;
+    if (!value.trim()) {
+      setLogoOverride(null);
+      return;
+    }
+    const staticMatch = ALL_COMPANIES.find((c) => c.name.toLowerCase() === value.toLowerCase());
+    if (staticMatch) {
+      setLogoOverride(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(`/api/companies/search?q=${encodeURIComponent(value)}`, { signal: controller.signal })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: Company[]) => {
+        const match = data.find((c) => c.name.toLowerCase() === value.toLowerCase()) ?? data[0];
+        if (match) setLogoOverride(match.logo);
+      })
+      .catch(() => {});
+    return () => controller.abort();
   }, [value]);
 
   // Derive logo: prefer live-search override, then static list lookup
   const selectedLogo = React.useMemo(() => {
     if (!query.trim()) return null;
-    if (logoOverrideRef.current) return logoOverrideRef.current;
+    if (logoOverride) return logoOverride;
     const match = ALL_COMPANIES.find((c) => c.name.toLowerCase() === query.toLowerCase());
     return match ? match.logo : null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  }, [query, logoOverride]);
 
   React.useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -233,14 +248,14 @@ export function CompanyInput({ value, onChange, placeholder = 'Acme Corp', class
   }
 
   function handleSelect(company: Company) {
-    logoOverrideRef.current = company.logo;
+    setLogoOverride(company.logo);
     setQuery(company.name);
     onChange(company.name);
     setOpen(false);
   }
 
   function handleClear() {
-    logoOverrideRef.current = null;
+    setLogoOverride(null);
     setQuery('');
     onChange('');
     setResults(POPULAR);

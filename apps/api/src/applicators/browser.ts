@@ -10,32 +10,97 @@ import type { ApplyPayload, ApplyResult } from './http.js';
 // ─── Pre-fetch: resolve LinkedIn external URL before launching browser ─────────
 
 export async function resolveLinkedInApplyUrl(jobUrl: string): Promise<string | null> {
-  try {
-    const res = await fetch(jobUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return null;
-    const html = await res.text();
-    // Extract offsite apply URL from HTML attributes
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+  };
+
+  // Extract numeric job ID from any LinkedIn job URL format
+  const jobIdMatch = jobUrl.match(/(?:jobs\/view\/|jobPosting\/)(\d+)/i);
+  const jobId = jobIdMatch?.[1];
+
+  // Helper: extract the first non-LinkedIn URL matching our known patterns from HTML
+  function extractApplyUrl(html: string, source: string): string | null {
+    // PRIMARY: LinkedIn jobPosting API embeds the apply URL inside an HTML comment in
+    // <code id="applyUrl" style="display: none"><!--"https://...externalApply/...?url=ENCODED_ATS_URL"--></code>
+    // The real ATS URL is the url= query param of the LinkedIn externalApply redirect.
+    const codeTagMatch = html.match(/<code[^>]*id="applyUrl"[^>]*><!--"([^"]+)"--><\/code>/i);
+    if (codeTagMatch?.[1]) {
+      const rawHref = codeTagMatch[1].replace(/&amp;/g, '&');
+      // Extract the url= param from the externalApply redirect
+      const urlParam = new URL(rawHref).searchParams.get('url');
+      if (urlParam) {
+        const atsUrl = decodeURIComponent(urlParam);
+        if (!atsUrl.includes('linkedin.com') && atsUrl.startsWith('http')) {
+          return atsUrl;
+        }
+      }
+      // If no url= param, the href itself might be the direct ATS URL
+      if (!rawHref.includes('linkedin.com') && rawHref.startsWith('http')) {
+        return rawHref;
+      }
+    }
+
+    // FALLBACK patterns for other LinkedIn page formats
     const patterns = [
+      // Embedded JSON blob
+      /"applyUrl"\s*:\s*"(https?:\/\/[^"]+)"/,
+      /"apply_url"\s*:\s*"(https?:\/\/[^"]+)"/,
+      // JSON-LD structured data
+      /"url"\s*:\s*"(https?:\/\/(?!(?:www\.)?linkedin\.com)[^"]+)"/,
+      // HTML attribute offsite link
       /data-tracking-control-name="public_jobs_apply-link-offsite"[^>]*href="([^"]+)"/i,
       /href="([^"]+)"[^>]*data-tracking-control-name="public_jobs_apply-link-offsite"/i,
-      /"applyUrl"\s*:\s*"([^"]+)"/,
+      // Generic apply button href
       /class="apply-button[^"]*"[^>]*href="([^"]+)"/i,
+      // Any href that looks like an ATS URL
+      /href="(https?:\/\/(?:[^"]*\.(?:greenhouse|lever|workday|ashbyhq|taleo|icims|jobvite|smartrecruiters|bamboohr|recruitee|dover|rippling)[^"]*))"/i,
     ];
     for (const pat of patterns) {
       const m = html.match(pat);
-      if (m?.[1] && !m[1].includes('linkedin.com')) {
-        return decodeURIComponent(m[1].replace(/&amp;/g, '&'));
+      if (m?.[1]) {
+        const url = decodeURIComponent(m[1].replace(/&amp;/g, '&').replace(/\\/g, ''));
+        if (!url.includes('linkedin.com') && url.startsWith('http')) {
+          return url;
+        }
       }
     }
+    // If the page is a valid LinkedIn job (has decoratedJobPostingId) but no external
+    // applyUrl was found, it's an Easy Apply job — signal the caller to use jobUrl directly.
+    if (html.includes('id="decoratedJobPostingId"')) {
+      return 'EASY_APPLY';
+    }
     return null;
-  } catch {
+  }
+
+  try {
+    // Primary: use the jobs-guest jobPosting API endpoint — returns static HTML
+    // with embedded JSON that reliably contains applyUrl for offsite applications
+    if (jobId) {
+      const postingUrl = `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${jobId}`;
+      const postingRes = await fetch(postingUrl, { headers, signal: AbortSignal.timeout(8000) });
+      if (postingRes.ok) {
+        const html = await postingRes.text();
+        const found = extractApplyUrl(html, 'jobPosting API');
+        if (found === 'EASY_APPLY') {
+          // Easy Apply job — no external ATS URL. Return the clean job view URL so
+          // the Apply button opens the LinkedIn job page where the user can Easy Apply.
+          return `https://www.linkedin.com/jobs/view/${jobId}/`;
+        }
+        if (found) return found;
+      } else {
+        console.warn(`[resolveLinkedIn] jobPosting API returned ${postingRes.status} for job ${jobId}`);
+      }
+    }
+
+    // Fallback: try the original job view URL
+    const res = await fetch(jobUrl, { headers, signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const html = await res.text();
+    return extractApplyUrl(html, 'jobUrl fallback');
+  } catch (err) {
+    console.error(`[resolveLinkedIn] exception for ${jobUrl}: ${err}`);
     return null;
   }
 }

@@ -6,6 +6,55 @@ import type { NormalizedJob } from './ashby.js';
 // LinkedIn guest jobs API — publicly accessible, no auth required.
 // Same data Google Jobs indexes. Returns HTML job card fragments.
 const LI_GUEST_API = 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search';
+const LI_POSTING_API = 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting';
+
+// Resolve the external ATS apply URL from a LinkedIn job ID using the jobPosting API.
+// Returns the resolved URL or null if not found / not an offsite application.
+async function resolveApplyUrlFromPosting(jobId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${LI_POSTING_API}/${jobId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    // PRIMARY: <code id="applyUrl"><!--"https://...externalApply/...?url=ENCODED_ATS_URL"--></code>
+    const codeTagMatch = html.match(/<code[^>]*id="applyUrl"[^>]*><!--"([^"]+)"--><\/code>/i);
+    if (codeTagMatch?.[1]) {
+      const rawHref = codeTagMatch[1].replace(/&amp;/g, '&');
+      const urlParam = new URL(rawHref).searchParams.get('url');
+      if (urlParam) {
+        const atsUrl = decodeURIComponent(urlParam);
+        if (!atsUrl.includes('linkedin.com') && atsUrl.startsWith('http')) return atsUrl;
+      }
+      if (!rawHref.includes('linkedin.com') && rawHref.startsWith('http')) return rawHref;
+    }
+
+    // FALLBACK patterns
+    const patterns = [
+      /"applyUrl"\s*:\s*"(https?:\/\/[^"]+)"/,
+      /"apply_url"\s*:\s*"(https?:\/\/[^"]+)"/,
+      /data-tracking-control-name="public_jobs_apply-link-offsite"[^>]*href="([^"]+)"/i,
+      /href="([^"]+)"[^>]*data-tracking-control-name="public_jobs_apply-link-offsite"/i,
+      /href="(https?:\/\/(?:[^"]*\.(?:greenhouse|lever|workday|ashbyhq|taleo|icims|jobvite|smartrecruiters|bamboohr|recruitee|dover|rippling)[^"]*))"/i,
+    ];
+    for (const pat of patterns) {
+      const m = html.match(pat);
+      if (m?.[1]) {
+        const url = decodeURIComponent(m[1].replace(/&amp;/g, '&').replace(/\\/g, ''));
+        if (!url.includes('linkedin.com') && url.startsWith('http')) return url;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 type QueryCategory = 'software' | 'business';
 
@@ -107,6 +156,16 @@ export async function fetchLinkedInJobs(budget: RequestBudget): Promise<Normaliz
             postedAt: job.postedAt,
           });
 
+          // Attempt to resolve the external ATS apply URL from the jobPosting API.
+          // Only consume a budget slot when there is headroom (keep ≥5 slots free).
+          let resolvedApplyUrl = job.applyUrl;
+          const jobIdForResolve = job.externalId.replace(/^li-/, '');
+          if (jobIdForResolve && budget.used < budget.limit - 5) {
+            budget.used++;
+            const atsUrl = await resolveApplyUrlFromPosting(jobIdForResolve);
+            if (atsUrl) resolvedApplyUrl = atsUrl;
+          }
+
           results.push({
             externalId: job.externalId,
             company: job.company,
@@ -117,7 +176,7 @@ export async function fetchLinkedInJobs(budget: RequestBudget): Promise<Normaliz
             postedAt: job.postedAt,
             descriptionPlain: job.descriptionPlain,
             jobUrl: job.jobUrl,
-            applyUrl: job.applyUrl,
+            applyUrl: resolvedApplyUrl,
             applyType: 'url',
             applyEmail: null,
             jobCategory,
