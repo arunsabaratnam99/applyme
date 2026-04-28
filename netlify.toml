@@ -1,7 +1,7 @@
 [build]
   base = "apps/web"
   command = "cd ../.. && pnpm install && pnpm --filter @applyme/web build"
-  publish = "apps/web/.next"
+  publish = ".next"
 
 [[redirects]]
   from = "/*"
