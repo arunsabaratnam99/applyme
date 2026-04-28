@@ -738,7 +738,7 @@ export async function POST(req: NextRequest) {
     // Try LLM extraction first; fall back to static list on failure
     let keywords: string[] = inferKeywords(text);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000';
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
       const kwRes = await fetch(`${baseUrl}/api/keywords/extract`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
