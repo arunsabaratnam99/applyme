@@ -2,6 +2,7 @@
   base = "apps/web"
   command = "cd ../.. && pnpm install && pnpm --filter @applyme/web build"
   publish = ".next"
+  environment = { SECRETS_SCAN_OMIT_KEYS = "APP_BASE_URL" }
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
