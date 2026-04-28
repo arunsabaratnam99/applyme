@@ -5,6 +5,6 @@ export default {
   out: './migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env['DATABASE_URL'] ?? 'postgresql://postgres.atxfejnbzffnhgreynsm:P6NSGHUxwvJNqben@aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=require',
+    url: process.env['DATABASE_URL'] ?? 'postgresql://applyme:applyme@localhost:5432/applyme',
   },
 } satisfies Config;

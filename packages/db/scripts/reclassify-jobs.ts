@@ -12,7 +12,7 @@ neonConfig.poolQueryViaFetch = false;
 
 const DB_URL =
   process.env['DATABASE_URL'] ??
-  'postgresql://postgres.atxfejnbzffnhgreynsm:P6NSGHUxwvJNqben@aws-0-us-west-2.pooler.supabase.com:5432/postgres?sslmode=require';
+  'postgresql://applyme:applyme@localhost:5432/applyme';
 
 const sql = neon(DB_URL);
 

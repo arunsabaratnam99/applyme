@@ -47,7 +47,7 @@ Want to run ApplyMe locally? Here's the fastest path:
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/yourusername/applyme
+git clone https://github.com/arunsabaratnam99/applyme
 cd applyme
 pnpm install
 
@@ -104,7 +104,7 @@ pnpm dev:api    # Terminal 2 → http://localhost:8787
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/yourname/applyme
+git clone https://github.com/arunsabaratnam99/applyme
 cd applyme
 pnpm install
 ```
@@ -215,7 +215,7 @@ pnpm wrangler login
 pnpm wrangler deploy
 ```
 
-This gives you a URL like `https://applyme-api.your-account.workers.dev`
+This gives you a URL like `https://applyme-api.<your-account>.workers.dev`
 
 ### 2. Web → Netlify or Vercel
 
@@ -312,9 +312,7 @@ Special thanks to the open-source community for making this possible.
 
 ## Support
 
-- 📧 **Email**: support@applyme.dev
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/applyme/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/applyme/discussions)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/arunsabaratnam99/applyme/issues)
 
 ---
 
