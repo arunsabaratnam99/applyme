@@ -3,10 +3,8 @@
   command = "cd ../.. && pnpm install && pnpm --filter @applyme/web build"
   publish = ".next"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
 
 [build.environment]
   NODE_VERSION = "20"
