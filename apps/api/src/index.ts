@@ -30,7 +30,10 @@ app.use(
   cors({
     origin: (origin, c) => {
       const appBase = c.env?.APP_BASE_URL ?? 'http://localhost:3000';
-      return origin === appBase ? origin : appBase;
+      if (!origin) return appBase;
+      const isDev = appBase.startsWith('http://localhost') || appBase.startsWith('http://127.0.0.1');
+      if (isDev && (origin.includes('localhost') || origin.includes('127.0.0.1'))) return origin;
+      return origin === appBase ? origin : null;
     },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],

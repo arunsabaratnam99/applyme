@@ -432,6 +432,7 @@ export default function SettingsPage() {
           yearsOfExperience: f.yearsOfExperience ? Number(f.yearsOfExperience) : null,
           workExperience: f.workExperience.map((e) => ({ ...e, description: (e.description ?? '').slice(0, 950) })),
           education: f.education.map((e) => ({ ...e, institution: (e.institution ?? '').slice(0, 190), degree: (e.degree ?? '').slice(0, 190), field: (e.field ?? '').slice(0, 190) })),
+          visaAuth: f.visaAuth || null,
           earliestStartDate: f.earliestStartDate || null,
           willingToRelocate: f.willingToRelocate,
           preferredPronouns: f.preferredPronouns || null,
@@ -877,6 +878,75 @@ export default function SettingsPage() {
                     collapsed={eduCollapsed}
                     onCollapsedChange={setEduCollapsed}
                   />
+                </div>
+
+                {/* ── Application Defaults ── */}
+                <div className="pt-2 border-t border-border">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Application Defaults</p>
+                  <p className="text-xs text-muted-foreground mb-4">Used to auto-answer common application questions.</p>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <FieldRow label="Work authorization" hint="Your right to work status">
+                      <select
+                        value={form.visaAuth}
+                        onChange={(e) => { const f = { ...form, visaAuth: e.target.value }; setForm(f); autoSaveAppInfo(f); }}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
+                      >
+                        <option value="">Not specified</option>
+                        <option value="citizen">Citizen</option>
+                        <option value="permanent_resident">Permanent Resident</option>
+                        <option value="work_permit">Work Permit / Visa</option>
+                        <option value="student_visa">Student Visa</option>
+                        <option value="needs_sponsorship">Require Sponsorship</option>
+                      </select>
+                    </FieldRow>
+
+                    <FieldRow label="Sponsorship required" hint="Do you need the employer to sponsor your visa?">
+                      <select
+                        value={form.visaAuth === 'needs_sponsorship' ? 'yes' : form.visaAuth ? 'no' : ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const next = val === 'yes' ? 'needs_sponsorship' : val === 'no' ? (form.visaAuth === 'needs_sponsorship' ? 'work_permit' : form.visaAuth) : form.visaAuth;
+                          const f = { ...form, visaAuth: next };
+                          setForm(f);
+                          autoSaveAppInfo(f);
+                        }}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
+                      >
+                        <option value="">Not specified</option>
+                        <option value="no">No — I do not need sponsorship</option>
+                        <option value="yes">Yes — I require sponsorship</option>
+                      </select>
+                    </FieldRow>
+
+                    <FieldRow label="Earliest start date">
+                      <select
+                        value={form.earliestStartDate}
+                        onChange={(e) => { const f = { ...form, earliestStartDate: e.target.value }; setForm(f); autoSaveAppInfo(f); }}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
+                      >
+                        <option value="">Not specified</option>
+                        <option value="Immediately">Immediately</option>
+                        <option value="2 weeks">2 weeks notice</option>
+                        <option value="1 month">1 month notice</option>
+                        <option value="2 months">2 months notice</option>
+                        <option value="3 months">3 months notice</option>
+                        <option value="After graduation">After graduation</option>
+                        <option value="Flexible">Flexible</option>
+                      </select>
+                    </FieldRow>
+
+                    <FieldRow label="Willing to relocate">
+                      <select
+                        value={form.willingToRelocate ? 'yes' : 'no'}
+                        onChange={(e) => { const f = { ...form, willingToRelocate: e.target.value === 'yes' }; setForm(f); autoSaveAppInfo(f); }}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background transition-colors"
+                      >
+                        <option value="no">No</option>
+                        <option value="yes">Yes</option>
+                      </select>
+                    </FieldRow>
+                  </div>
                 </div>
 
                 {/* ── DEI ── */}

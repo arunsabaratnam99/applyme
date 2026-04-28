@@ -379,8 +379,10 @@ export default function JobsPage() {
   const moreFiltersCount = (salaryMin ? 1 : 0) + (salaryMax ? 1 : 0) + selectedSources.length + selectedWorkplace.length + (dateFilter !== 'any' ? 1 : 0) + (!prioritizeWatchlist ? 1 : 0);
 
   const router = useRouter();
+  const [applyingJobIds, setApplyingJobIds] = React.useState<Set<string>>(new Set());
 
   async function handleQuickApply(jobId: string) {
+    setApplyingJobIds((prev) => new Set(prev).add(jobId));
     try {
       const result = await api.post<{ draftId?: string; status?: string }>(`/api/jobs/${jobId}/quick-apply`, {});
       if (result.draftId) {
@@ -391,6 +393,8 @@ export default function JobsPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to start Quick Apply';
       toast({ title: 'Quick Apply failed', description: msg, variant: 'destructive' });
+    } finally {
+      setApplyingJobIds((prev) => { const next = new Set(prev); next.delete(jobId); return next; });
     }
   }
 
@@ -556,6 +560,7 @@ export default function JobsPage() {
                       selected={selectedJob?.id === job.id}
                       onClick={() => setSelectedJob(selectedJob?.id === job.id ? null : job)}
                       onQuickApply={handleQuickApply}
+                      isApplying={applyingJobIds.has(job.id)}
                       isWatched={!!watchlistData?.items?.some((i) => i.itemType === 'company' && i.value.toLowerCase() === job.company.toLowerCase())}
                       resolvedUrls={resolvedUrlCache.current}
                     />
@@ -585,7 +590,7 @@ export default function JobsPage() {
 
       {/* Job detail slide-over */}
       {selectedJob && (
-        <JobDetailPanel job={selectedJob} onClose={() => setSelectedJob(null)} onQuickApply={handleQuickApply} resolvedUrls={resolvedUrlCache.current} />
+        <JobDetailPanel job={selectedJob} onClose={() => setSelectedJob(null)} onQuickApply={handleQuickApply} isApplying={applyingJobIds.has(selectedJob.id)} resolvedUrls={resolvedUrlCache.current} />
       )}
 
     </div>
@@ -1119,7 +1124,7 @@ function ApplyButton({ job, className, label = 'Apply', iconSize = 'h-3 w-3', re
 
 // ─── Job card ─────────────────────────────────────────────────────────────────
 
-function JobCard({ job, selected, onClick, onQuickApply, isWatched, resolvedUrls }: { job: Job; selected: boolean; onClick: () => void; onQuickApply: (jobId: string) => void; isWatched?: boolean; resolvedUrls?: Map<string, string> }) {
+function JobCard({ job, selected, onClick, onQuickApply, isApplying, isWatched, resolvedUrls }: { job: Job; selected: boolean; onClick: () => void; onQuickApply: (jobId: string) => void; isApplying?: boolean; isWatched?: boolean; resolvedUrls?: Map<string, string> }) {
   return (
     <div
       onClick={onClick}
@@ -1168,10 +1173,11 @@ function JobCard({ job, selected, onClick, onQuickApply, isWatched, resolvedUrls
             <ApplyButton job={job} className="flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium hover:bg-accent transition-colors" {...(resolvedUrls ? { resolvedUrls } : {})} />
             <button
               onClick={(e) => { e.stopPropagation(); onQuickApply(job.id); }}
-              className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              disabled={isApplying}
+              className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Zap className="h-3 w-3" />
-              Quick Apply
+              {isApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+              {isApplying ? 'Applying…' : 'Quick Apply'}
             </button>
           </div>
         </div>
@@ -1281,7 +1287,7 @@ function extractSalaryFromText(text: string): ParsedSalary {
 
 // ─── Job detail slide-over ────────────────────────────────────────────────────
 
-function JobDetailPanel({ job, onClose, onQuickApply, resolvedUrls }: { job: Job; onClose: () => void; onQuickApply: (jobId: string) => void; resolvedUrls?: Map<string, string> }) {
+function JobDetailPanel({ job, onClose, onQuickApply, isApplying, resolvedUrls }: { job: Job; onClose: () => void; onQuickApply: (jobId: string) => void; isApplying?: boolean; resolvedUrls?: Map<string, string> }) {
   const { data: salary, isLoading: salaryLoading } = useSWR<SalaryData>(
     `/api/jobs/salary?title=${encodeURIComponent(job.title)}&location=${encodeURIComponent(job.location)}&jobId=${job.id}`,
     (url: string) => api.get<SalaryData>(url),
@@ -1467,10 +1473,11 @@ function JobDetailPanel({ job, onClose, onQuickApply, resolvedUrls }: { job: Job
           <ApplyButton job={job} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-border bg-background py-2.5 text-sm font-medium hover:bg-accent transition-colors" label="View posting" iconSize="h-4 w-4" {...(resolvedUrls ? { resolvedUrls } : {})} />
           <button
             onClick={() => onQuickApply(job.id)}
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            disabled={isApplying}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <Zap className="h-4 w-4" />
-            Quick Apply
+            {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+            {isApplying ? 'Applying…' : 'Quick Apply'}
           </button>
         </div>
       </div>

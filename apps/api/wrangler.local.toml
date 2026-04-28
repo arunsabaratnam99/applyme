@@ -8,10 +8,7 @@ APP_BASE_URL = "http://localhost:3000"
 EMAIL_ENABLED = "false"
 LINKEDIN_SCRAPER_ENABLED = "true"
 INDEED_SCRAPER_ENABLED = "true"
-BROWSER_ENABLED = "true"
-
-[browser]
-binding = "BROWSER"
+BROWSER_ENABLED = "false"
 
 [[triggers]]
 crons = ["0 */4 * * *"]

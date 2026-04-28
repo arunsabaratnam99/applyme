@@ -96,6 +96,23 @@ drafts.post('/', zValidator('json', CreateDraftSchema), async (c) => {
   return c.json(draft, 201);
 });
 
+drafts.delete('/:id', async (c) => {
+  const db = c.get('db');
+  const userId = c.get('userId');
+  const { id } = c.req.param();
+
+  const draft = await db.query.applicationDrafts.findFirst({
+    where: and(eq(schema.applicationDrafts.id, id), eq(schema.applicationDrafts.userId, userId)),
+  });
+  if (!draft) return c.json({ error: 'Not found' }, 404);
+
+  await db.delete(schema.applicationDrafts).where(
+    and(eq(schema.applicationDrafts.id, id), eq(schema.applicationDrafts.userId, userId)),
+  );
+
+  return c.json({ ok: true });
+});
+
 drafts.post('/:id/approve', zValidator('json', ApproveDraftSchema), async (c) => {
   const db = c.get('db');
   const userId = c.get('userId');

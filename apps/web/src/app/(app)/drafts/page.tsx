@@ -1,11 +1,12 @@
 'use client';
 
 import React from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import Link from 'next/link';
-import { FileEdit, Building2, Clock, ChevronRight, Zap } from 'lucide-react';
+import { FileEdit, Building2, Clock, ChevronRight, Zap, Trash2, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
+import { toast } from '@/hooks/use-toast';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
@@ -33,13 +34,40 @@ function countUnanswered(draft: Draft): number {
   return questions.filter((q) => q.required && !q.profileValue?.trim()).length;
 }
 
+const SWR_KEY = '/api/drafts?status=needs_review';
+
 export default function DraftsPage() {
   const { data, isLoading } = useSWR<DraftsResponse>(
-    '/api/drafts?status=needs_review',
+    SWR_KEY,
     (url: string) => api.get<DraftsResponse>(url),
   );
+  const { mutate } = useSWRConfig();
+
+  const [confirmingId, setConfirmingId] = React.useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = React.useState<Set<string>>(new Set());
 
   const drafts = data?.drafts ?? [];
+
+  async function handleDelete(draftId: string) {
+    setDeletingIds((prev) => new Set(prev).add(draftId));
+    setConfirmingId(null);
+
+    // Optimistic removal
+    await mutate(SWR_KEY, (current: DraftsResponse | undefined) => ({
+      drafts: (current?.drafts ?? []).filter((d) => d.id !== draftId),
+    }), { revalidate: false });
+
+    try {
+      await api.delete(`/api/drafts/${draftId}`);
+      toast({ title: 'Draft deleted' });
+    } catch {
+      // Revert on error
+      await mutate(SWR_KEY);
+      toast({ title: 'Failed to delete draft', variant: 'destructive' });
+    } finally {
+      setDeletingIds((prev) => { const next = new Set(prev); next.delete(draftId); return next; });
+    }
+  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -71,17 +99,30 @@ export default function DraftsPage() {
           {drafts.map((draft) => {
             const unanswered = countUnanswered(draft);
             const atsType = draft.qaBundle?.atsType ?? 'unknown';
+            const isConfirming = confirmingId === draft.id;
+            const isDeleting = deletingIds.has(draft.id);
+
             return (
-              <Link
+              <div
                 key={draft.id}
-                href={`/drafts/${draft.id}`}
-                className="group flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3.5 hover:bg-accent/40 transition-colors"
+                className={cn(
+                  'group flex items-center gap-4 rounded-lg border bg-card px-4 py-3.5 transition-colors',
+                  isConfirming
+                    ? 'border-destructive/40 bg-destructive/5'
+                    : 'border-border hover:bg-accent/40',
+                )}
               >
+                {/* Left icon */}
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
                   <Zap className="h-4 w-4 text-primary" />
                 </div>
 
-                <div className="flex-1 min-w-0">
+                {/* Main content — clicking navigates to draft */}
+                <Link
+                  href={`/drafts/${draft.id}`}
+                  className="flex-1 min-w-0"
+                  onClick={(e) => isConfirming ? e.preventDefault() : undefined}
+                >
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium truncate">{draft.job?.title ?? 'Unknown role'}</p>
                     {unanswered > 0 && (
@@ -100,15 +141,44 @@ export default function DraftsPage() {
                       {formatRelativeTime(draft.createdAt)}
                     </span>
                   </div>
-                </div>
+                </Link>
 
+                {/* Right controls — always in flow, never overlapping */}
                 <div className="flex items-center gap-2 shrink-0">
-                  <Badge variant="outline" className="text-xs">
-                    {ATS_LABELS[atsType] ?? atsType}
-                  </Badge>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  {isConfirming ? (
+                    <>
+                      <span className="text-xs text-destructive font-medium mr-1">Delete?</span>
+                      <button
+                        onClick={() => handleDelete(draft.id)}
+                        disabled={isDeleting}
+                        className="rounded-md bg-destructive px-2.5 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-60"
+                      >
+                        {isDeleting ? 'Deleting…' : 'Yes'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmingId(null)}
+                        className="rounded-md border border-border bg-background p-1 hover:bg-accent transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Badge variant="outline" className="text-xs">
+                        {ATS_LABELS[atsType] ?? atsType}
+                      </Badge>
+                      <button
+                        onClick={() => setConfirmingId(draft.id)}
+                        className="rounded-md p-1.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all"
+                        title="Delete draft"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    </>
+                  )}
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>

@@ -287,14 +287,17 @@ function buildDraftQuestions(
   overrides: Record<string, string>,
 ): DraftQuestion[] {
   if (atsType !== 'greenhouse' || rawQuestions.length === 0) {
+    const pv = profileValues;
     const base: DraftQuestion[] = [
-      { fieldKey: 'first_name',   label: 'First Name',    required: true,  inputType: 'text',     profileValue: profileValues['first_name'] ?? '',   isGeneral: true, isReadOnly: true },
-      { fieldKey: 'last_name',    label: 'Last Name',     required: true,  inputType: 'text',     profileValue: profileValues['last_name'] ?? '',    isGeneral: true, isReadOnly: true },
-      { fieldKey: 'email',        label: 'Email',         required: true,  inputType: 'email',    profileValue: profileValues['email'] ?? '',        isGeneral: true, isReadOnly: true },
-      { fieldKey: 'phone',        label: 'Phone',         required: false, inputType: 'tel',      profileValue: profileValues['phone'] ?? '',        isGeneral: true, isReadOnly: !!profileValues['phone'] },
-      { fieldKey: 'resume',       label: 'Resume/CV',     required: true,  inputType: 'file',     profileValue: 'Attached',                          isGeneral: true, isReadOnly: true },
-      { fieldKey: 'cover_letter', label: 'Cover Letter',  required: false, inputType: 'textarea', profileValue: 'Attached',                          isGeneral: true, isReadOnly: true },
-      { fieldKey: 'linkedin_url', label: 'LinkedIn Profile', required: false, inputType: 'text', profileValue: profileValues['linkedin_url'] ?? '', isGeneral: true, isReadOnly: false },
+      { fieldKey: 'first_name',   label: 'First Name',       required: true,  inputType: 'text',     profileValue: pv['first_name'] ?? '',    isGeneral: true, isReadOnly: true },
+      { fieldKey: 'last_name',    label: 'Last Name',        required: true,  inputType: 'text',     profileValue: pv['last_name'] ?? '',     isGeneral: true, isReadOnly: true },
+      { fieldKey: 'email',        label: 'Email',            required: true,  inputType: 'email',    profileValue: pv['email'] ?? '',         isGeneral: true, isReadOnly: true },
+      { fieldKey: 'phone',        label: 'Phone',            required: false, inputType: 'tel',      profileValue: pv['phone'] ?? '',         isGeneral: true, isReadOnly: !!pv['phone'] },
+      { fieldKey: 'resume',       label: 'Resume/CV',        required: true,  inputType: 'file',     profileValue: 'Attached',                isGeneral: true, isReadOnly: true },
+      { fieldKey: 'cover_letter', label: 'Cover Letter',     required: false, inputType: 'textarea', profileValue: 'Attached',                isGeneral: true, isReadOnly: true },
+      { fieldKey: 'linkedin_url', label: 'LinkedIn Profile', required: false, inputType: 'text',     profileValue: pv['linkedin_url'] ?? '',  isGeneral: true, isReadOnly: !!pv['linkedin_url'] },
+      { fieldKey: 'github_url',   label: 'GitHub Profile',   required: false, inputType: 'text',     profileValue: pv['github_url'] ?? '',    isGeneral: true, isReadOnly: !!pv['github_url'] },
+      { fieldKey: 'website_url',  label: 'Website / Portfolio', required: false, inputType: 'text',  profileValue: pv['website_url'] ?? '',   isGeneral: true, isReadOnly: !!pv['website_url'] },
     ];
     return base;
   }
@@ -396,27 +399,226 @@ function buildDraftQuestions(
     // Use override from autofillProfiles (saved from previous applications) first
     const value = overrideVal ?? profileVal;
 
+    // Fuzzy-match a candidate string against a list of option labels.
+    // Returns the best matching option label, or '' if nothing matches.
+    function matchOption(candidate: string, opts: Array<{ label: string; value: string }>): string {
+      if (!candidate || opts.length === 0) return '';
+      const c = candidate.toLowerCase();
+      // Exact match first
+      const exact = opts.find((o) => o.label.toLowerCase() === c);
+      if (exact) return exact.label;
+      // Option label includes candidate
+      const incl = opts.find((o) => o.label.toLowerCase().includes(c));
+      if (incl) return incl.label;
+      // Candidate includes option label
+      const rev = opts.find((o) => c.includes(o.label.toLowerCase()));
+      if (rev) return rev.label;
+      // Word-level overlap — pick option with most shared words
+      const candWords = new Set(c.split(/\W+/).filter(Boolean));
+      let best = ''; let bestScore = 0;
+      for (const o of opts) {
+        const score = o.label.toLowerCase().split(/\W+/).filter((w) => candWords.has(w)).length;
+        if (score > bestScore) { bestScore = score; best = o.label; }
+      }
+      return bestScore > 0 ? best : '';
+    }
+
     // If still no value, try heuristic guessing from label keywords
     let guessedValue = '';
     if (!value) {
       const l = q.label.toLowerCase();
-      if (l.includes('start date') || l.includes('available') || l.includes('earliest start')) {
-        guessedValue = 'Immediately';
-      } else if (l.includes('salary') || l.includes('compensation') || l.includes('expected pay')) {
+      const hasOpts = q.values.length > 0;
+
+      // ── Work authorization / right to work ──
+      if (l.includes('right to work') || l.includes('unrestricted right') ||
+          l.includes('eligible to work') || l.includes('work authorization') ||
+          l.includes('work auth') || l.includes('authorized to work') ||
+          l.includes('legally authorized')) {
+        const visaAuth = profileValues['visa_auth'] ?? '';
+        // Non-sponsorship = "Yes" to right-to-work
+        const needsSponsorship = visaAuth === 'needs_sponsorship';
+        const raw = needsSponsorship ? 'No' : 'Yes';
+        guessedValue = hasOpts ? (matchOption(raw, q.values) || matchOption('Yes', q.values) || raw) : raw;
+
+      // ── Sponsorship needed ──
+      } else if (l.includes('require') && (l.includes('sponsor') || l.includes('visa')) ||
+                 l.includes('need') && l.includes('sponsor') ||
+                 l.includes('sponsorship')) {
+        const visaAuth = profileValues['visa_auth'] ?? '';
+        const needsSponsorship = visaAuth === 'needs_sponsorship';
+        const raw = needsSponsorship ? 'Yes' : 'No';
+        guessedValue = hasOpts ? (matchOption(raw, q.values) || raw) : raw;
+
+      // ── Privacy policy / consent / acknowledge ──
+      } else if (l.includes('privacy policy') || l.includes('acknowledge') ||
+                 l.includes('consent') || l.includes('agree') ||
+                 l.includes('terms') || l.includes('confirm')) {
+        // Find first "yes" / "agree" / "acknowledge" / "accept" option
+        const yesOpt = q.values.find((o) => {
+          const ol = o.label.toLowerCase();
+          return ol.includes('yes') || ol.includes('agree') || ol.includes('acknowledge') ||
+                 ol.includes('accept') || ol.includes('confirm') || ol.includes('i have');
+        });
+        guessedValue = yesOpt?.label ?? (hasOpts ? q.values[0]?.label ?? '' : 'Yes');
+
+      // ── Start date / availability ──
+      } else if (l.includes('start date') || l.includes('available') || l.includes('earliest start') ||
+                 l.includes('when can you start') || l.includes('notice period')) {
+        const stored = profileValues['earliest_start_date'] ?? profileValues['earliestStartDate'] ?? '';
+        const raw = stored || 'Immediately';
+        guessedValue = hasOpts ? (matchOption(raw, q.values) || matchOption('Immediately', q.values) || raw) : raw;
+
+      // ── Salary / compensation ──
+      } else if (l.includes('salary') || l.includes('compensation') || l.includes('expected pay') ||
+                 l.includes('pay expectation')) {
         guessedValue = profileValues['salary_min'] ?? '';
-      } else if (l.includes('pronouns') || l.includes('pronoun')) {
-        guessedValue = 'They/Them';
-      } else if (l.includes('citizenship') || l.includes('work authorization') || l.includes('work auth')) {
-        guessedValue = profileValues['visa_auth'] ?? '';
-      } else if (l.includes('country') || l.includes('nation')) {
+
+      // ── Pronouns ──
+      } else if (l.includes('pronoun')) {
+        const stored = profileValues['preferred_pronouns'] ?? profileValues['preferredPronouns'] ?? '';
+        // Map stored value to common pronoun option labels
+        const pronounMap: Record<string, string> = {
+          man: 'He/Him', woman: 'She/Her', non_binary: 'They/Them', other: 'Prefer to self-describe',
+        };
+        const raw = pronounMap[stored] ?? stored ?? 'Prefer not to say';
+        guessedValue = hasOpts ? (matchOption(raw, q.values) || matchOption('Prefer not to say', q.values) || raw) : raw;
+
+      // ── Gender identity ──
+      } else if (l.includes('gender') && !l.includes('pronoun')) {
+        const stored = profileValues['preferred_pronouns'] ?? '';
+        const genderMap: Record<string, string> = {
+          man: 'Man', woman: 'Woman', non_binary: 'Non-binary', other: 'Self-describe',
+        };
+        const raw = genderMap[stored] ?? 'Prefer not to say';
+        guessedValue = hasOpts ? (matchOption(raw, q.values) || matchOption('Prefer not to say', q.values) || raw) : raw;
+
+      // ── Race / ethnicity ──
+      } else if (l.includes('race') || l.includes('ethnicity')) {
+        const stored = profileValues['ethnicity'] ?? '';
+        const ethnicMap: Record<string, string> = {
+          asian: 'Asian', black: 'Black or African American', hispanic: 'Hispanic or Latino',
+          white: 'White', middle_eastern: 'Middle Eastern', native_american: 'American Indian',
+          pacific_islander: 'Native Hawaiian', two_or_more: 'Two or more races',
+        };
+        const raw = ethnicMap[stored] ?? 'Decline to state';
+        guessedValue = hasOpts ? (matchOption(raw, q.values) || matchOption('Decline', q.values) || matchOption('Prefer not', q.values) || raw) : raw;
+
+      // ── Veteran status ──
+      } else if (l.includes('veteran')) {
+        const stored = profileValues['veteran_status'] ?? profileValues['veteranStatus'] ?? '';
+        const raw = stored === 'veteran' ? 'I identify as a protected veteran' : 'I am not a protected veteran';
+        guessedValue = hasOpts ? (matchOption(raw, q.values) || matchOption('not a protected', q.values) || raw) : raw;
+
+      // ── Disability status ──
+      } else if (l.includes('disability') || l.includes('disabled')) {
+        const stored = profileValues['disability_status'] ?? profileValues['disabilityStatus'] ?? '';
+        const raw = stored === 'yes' ? 'Yes, I have a disability' : 'No, I don\'t have a disability';
+        guessedValue = hasOpts ? (matchOption(raw, q.values) || matchOption('No', q.values) || raw) : raw;
+
+      // ── Willing to relocate ──
+      } else if (l.includes('relocate') || l.includes('relocation')) {
+        const willing = profileValues['willing_to_relocate'] ?? profileValues['willingToRelocate'] ?? 'false';
+        const raw = (willing === 'true' || willing === '1') ? 'Yes' : 'No';
+        guessedValue = hasOpts ? (matchOption(raw, q.values) || raw) : raw;
+
+      // ── How did you hear / referral source ──
+      } else if (l.includes('how did you hear') || l.includes('referral') || l.includes('source') ||
+                 l.includes('how did you find')) {
+        guessedValue = hasOpts ? (matchOption('LinkedIn', q.values) || matchOption('Online', q.values) || '') : 'LinkedIn';
+
+      // ── Citizenship ──
+      } else if (l.includes('citizenship') || l.includes('citizen')) {
+        const visaAuth = profileValues['visa_auth'] ?? '';
+        const raw = (visaAuth === 'citizen' || visaAuth === 'permanent_resident') ? 'Yes' : 'No';
+        guessedValue = hasOpts ? (matchOption(raw, q.values) || raw) : raw;
+
+      // ── Country ──
+      } else if (l.includes('country') && !l.includes('citizenship')) {
         guessedValue = profileValues['location'] ?? 'Canada';
+        if (hasOpts) guessedValue = matchOption(guessedValue, q.values) || matchOption('Canada', q.values) || guessedValue;
+
+      // ── City / location ──
       } else if (l.includes('city') || l.includes('current location') || l.includes('where are you based')) {
         guessedValue = profileValues['location_city'] ?? profileValues['location'] ?? '';
-      } else if ((l.includes('years') || l.includes('experience')) && q.type === 'multi_value_single_select' && q.values.length > 0) {
-        // Pick a middle option for experience dropdowns
-        const midIdx = Math.floor(q.values.length / 2);
-        guessedValue = q.values[midIdx]?.label ?? '';
+
+      // ── Years of experience ──
+      } else if ((l.includes('years') || l.includes('experience')) && hasOpts) {
+        const yoe = Number(profileValues['years_of_experience'] ?? profileValues['yearsOfExperience'] ?? 0);
+        if (yoe > 0) {
+          const numericOpt = q.values.find((o) => {
+            const nums = o.label.match(/\d+/g)?.map(Number) ?? [];
+            if (nums.length === 0) return false;
+            if (nums.length === 1) return Math.abs(nums[0]! - yoe) <= 1;
+            return yoe >= nums[0]! && yoe <= nums[nums.length - 1]!;
+          });
+          guessedValue = numericOpt?.label ?? q.values[Math.floor(q.values.length / 2)]?.label ?? '';
+        } else {
+          guessedValue = q.values[Math.floor(q.values.length / 2)]?.label ?? '';
+        }
+
+      // ── Worked here / employed by company before ──
+      } else if (hasOpts && (
+        (l.includes('worked') || l.includes('employed') || l.includes('work for') || l.includes('work at')) &&
+        (l.includes('before') || l.includes('previously') || l.includes('ever') || l.includes('past'))
+      )) {
+        guessedValue = (matchOption('No', q.values) || matchOption('no', q.values) || q.values[0]?.label) ?? '';
+
+      // ── Used / tried the company product ──
+      } else if (hasOpts && (l.includes('used') || l.includes('tried') || l.includes('use') || l.includes('familiar with')) &&
+                 !l.includes('authorization') && !l.includes('auth')) {
+        // "Have you used X?" — yes is safe, shows brand affinity
+        guessedValue = (matchOption('Yes', q.values) || q.values[0]?.label) ?? '';
+
+      // ── Conflict of interest / outside business / relationships ──
+      } else if (hasOpts && (
+        l.includes('conflict') || l.includes('outside business') || l.includes('familial') ||
+        l.includes('personal relationship') || l.includes('intellectual property') ||
+        l.includes('investment') || l.includes('outside activit')
+      )) {
+        guessedValue = (matchOption('No', q.values) || q.values[0]?.label) ?? '';
+
+      // ── Degree type ──
+      } else if (hasOpts && (l.includes('degree') || l.includes('type of degree') || l.includes('pursuing'))) {
+        // Pull from education entries if available
+        const edu = profileValues['education_degree'] ?? '';
+        const degreeMap: Record<string, string> = {
+          bachelor: "Bachelor's", bachelors: "Bachelor's", bs: "Bachelor's", ba: "Bachelor's",
+          master: "Master's", masters: "Master's", ms: "Master's", ma: "Master's",
+          phd: 'PhD', doctorate: 'PhD', doctor: 'PhD',
+          associate: "Associate's", diploma: 'Diploma',
+        };
+        const raw = Object.entries(degreeMap).reduce<string>((found, [key, label]) =>
+          found || (edu.toLowerCase().includes(key) ? label : ''), '') || "Bachelor's";
+        guessedValue = (matchOption(raw, q.values) || matchOption("Bachelor's", q.values) || q.values[0]?.label) ?? '';
+
+      // ── Graduation date ──
+      } else if (hasOpts && (l.includes('graduation') || l.includes('graduate') || l.includes('grad date') ||
+                 l.includes('expected graduation') || l.includes('completion date'))) {
+        const gradYear = profileValues['education_end_year'] ?? profileValues['graduation_year'] ?? '';
+        if (gradYear) {
+          guessedValue = (matchOption(gradYear, q.values) || q.values[0]?.label) ?? '';
+        } else {
+          // Default to first option (usually current/upcoming year)
+          guessedValue = q.values[0]?.label ?? '';
+        }
+
+      // ── Catchall: any unmatched select with Yes/No options — pick "No" as safe default ──
+      } else if (hasOpts && inputType === 'select') {
+        const noOpt = q.values.find((o) => o.label.toLowerCase() === 'no');
+        const yesOpt = q.values.find((o) => o.label.toLowerCase() === 'yes');
+        // Only auto-guess if it's purely a yes/no question (2-3 options, one is Yes, one is No)
+        const isPureYesNo = q.values.length <= 3 && noOpt && yesOpt;
+        if (isPureYesNo) {
+          // For required questions that ask "do you have X" or "are you X" — default No (safer)
+          guessedValue = noOpt.label;
+        }
       }
+    }
+
+    // For select fields: ensure guessedValue is an actual option label (exact match required for <select>)
+    if (guessedValue && q.values.length > 0 && inputType === 'select') {
+      const matched = matchOption(guessedValue, q.values);
+      guessedValue = matched; // blank if no match — better than wrong selection
     }
 
     const finalValue = value || guessedValue;
@@ -498,6 +700,9 @@ jobs.post('/:id/quick-apply', zValidator('json', QuickApplySchema), async (c) =>
   );
 
   const nameParts = (profile?.displayName ?? user.name ?? user.email).trim().split(' ');
+  // Pull the most recent education entry for degree/graduation guesses
+  const eduEntries = (profile?.education ?? []) as Array<{ degree?: string; institution?: string; endYear?: string }>;
+  const latestEdu = eduEntries[eduEntries.length - 1];
   const profileValues: Record<string, string> = {
     first_name: nameParts[0] ?? '',
     last_name: nameParts.slice(1).join(' '),
@@ -510,6 +715,15 @@ jobs.post('/:id/quick-apply', zValidator('json', QuickApplySchema), async (c) =>
     website_url: profile?.websiteUrl ?? '',
     visa_auth: profile?.visaAuth ?? '',
     cover_letter: coverLetter,
+    years_of_experience: String(profile?.yearsOfExperience ?? ''),
+    preferred_pronouns: profile?.preferredPronouns ?? '',
+    ethnicity: profile?.ethnicity ?? '',
+    veteran_status: profile?.veteranStatus ?? '',
+    disability_status: profile?.disabilityStatus ?? '',
+    earliest_start_date: profile?.earliestStartDate ?? '',
+    willing_to_relocate: profile?.willingToRelocate ? 'true' : 'false',
+    education_degree: latestEdu?.degree ?? '',
+    education_end_year: latestEdu?.endYear ?? '',
   };
 
   // Fetch ATS-specific questions (parallel with draft creation)
