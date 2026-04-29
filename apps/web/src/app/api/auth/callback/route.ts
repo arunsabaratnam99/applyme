@@ -12,11 +12,11 @@ export function GET(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Set the session cookie from the web origin (localhost:3000) so it is
-  // sent with every subsequent fetch to the API via credentials:'include'.
+  // Set the session cookie from the web origin. Not httpOnly so JS can read it
+  // and send as Authorization header for cross-origin API requests.
   const res = NextResponse.redirect(new URL('/jobs', req.url));
   res.cookies.set(COOKIE_NAME, token, {
-    httpOnly: true,
+    httpOnly: false,
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 24 * 7, // 7 days

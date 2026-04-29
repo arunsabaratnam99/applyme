@@ -4,12 +4,20 @@ const API_BASE =
   process.env['NEXT_PUBLIC_API_BASE_URL'] ??
   'http://localhost:8787';
 
+function getSessionToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/am_session=([^;]+)/);
+  return match?.[1] ?? null;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getSessionToken();
   const init: RequestInit = {
     ...options,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   };
