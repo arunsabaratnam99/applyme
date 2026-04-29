@@ -31,9 +31,14 @@ app.use(
     origin: (origin, c) => {
       const appBase = c.env?.APP_BASE_URL ?? 'http://localhost:3000';
       if (!origin) return appBase;
+      // Allow localhost in dev
       const isDev = appBase.startsWith('http://localhost') || appBase.startsWith('http://127.0.0.1');
       if (isDev && (origin.includes('localhost') || origin.includes('127.0.0.1'))) return origin;
-      return origin === appBase ? origin : null;
+      // Allow exact match
+      if (origin === appBase) return origin;
+      // Allow Netlify deploy previews (*.netlify.app)
+      if (origin.endsWith('.netlify.app')) return origin;
+      return null;
     },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
