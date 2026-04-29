@@ -12,7 +12,8 @@ const auth = new Hono<{ Bindings: Env; Variables: Variables }>();
 // ─── Google OAuth ─────────────────────────────────────────────────────────────
 
 auth.get('/google', (c) => {
-  const state = crypto.randomUUID();
+  const origin = c.req.query('origin') ?? c.env.APP_BASE_URL;
+  const state = btoa(JSON.stringify({ nonce: crypto.randomUUID(), origin }));
   const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
   const params = new URLSearchParams({
     client_id: c.env.OAUTH_GOOGLE_CLIENT_ID,
@@ -71,14 +72,25 @@ auth.get('/google/callback', async (c) => {
     c.env.JWT_SECRET,
   );
 
-  const callbackUrl = `${c.env.APP_BASE_URL}/api/auth/callback?token=${encodeURIComponent(token)}`;
+  // Parse origin from state
+  const { state } = c.req.query();
+  let origin = c.env.APP_BASE_URL;
+  try {
+    const parsed = JSON.parse(atob(state ?? ''));
+    if (parsed.origin?.endsWith('.netlify.app') || parsed.origin?.startsWith('http://localhost')) {
+      origin = parsed.origin;
+    }
+  } catch { /* use default */ }
+
+  const callbackUrl = `${origin}/api/auth/callback?token=${encodeURIComponent(token)}`;
   return c.redirect(callbackUrl, 302);
 });
 
 // ─── GitHub OAuth ─────────────────────────────────────────────────────────────
 
 auth.get('/github', (c) => {
-  const state = crypto.randomUUID();
+  const origin = c.req.query('origin') ?? c.env.APP_BASE_URL;
+  const state = btoa(JSON.stringify({ nonce: crypto.randomUUID(), origin }));
   const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
   const params = new URLSearchParams({
     client_id: c.env.OAUTH_GITHUB_CLIENT_ID,
@@ -140,7 +152,17 @@ auth.get('/github/callback', async (c) => {
     c.env.JWT_SECRET,
   );
 
-  const callbackUrl = `${c.env.APP_BASE_URL}/api/auth/callback?token=${encodeURIComponent(token)}`;
+  // Parse origin from state
+  const { state } = c.req.query();
+  let origin = c.env.APP_BASE_URL;
+  try {
+    const parsed = JSON.parse(atob(state ?? ''));
+    if (parsed.origin?.endsWith('.netlify.app') || parsed.origin?.startsWith('http://localhost')) {
+      origin = parsed.origin;
+    }
+  } catch { /* use default */ }
+
+  const callbackUrl = `${origin}/api/auth/callback?token=${encodeURIComponent(token)}`;
   return c.redirect(callbackUrl, 302);
 });
 

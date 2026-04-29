@@ -436,10 +436,10 @@ function StepSignIn() {
       </div>
 
       <div className="space-y-3">
-        <a href={`${API_BASE}/auth/google`} className={btnCls} style={{ borderColor: M.border, background: M.card, color: '#e8e0d5' }}>
+        <a href={`${API_BASE}/auth/google?origin=${typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''}`} className={btnCls} style={{ borderColor: M.border, background: M.card, color: '#e8e0d5' }}>
           <GoogleIcon /> Continue with Google
         </a>
-        <a href={`${API_BASE}/auth/github`} className={btnCls} style={{ borderColor: M.border, background: M.card, color: '#e8e0d5' }}>
+        <a href={`${API_BASE}/auth/github?origin=${typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''}`} className={btnCls} style={{ borderColor: M.border, background: M.card, color: '#e8e0d5' }}>
           <GithubIcon /> Continue with GitHub
         </a>
       </div>
