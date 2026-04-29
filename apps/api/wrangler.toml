@@ -4,7 +4,7 @@ compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-APP_BASE_URL = "http://localhost:3000"
+APP_BASE_URL = "https://aapplyme.netlify.app"
 EMAIL_ENABLED = "false"
 LINKEDIN_SCRAPER_ENABLED = "true"
 INDEED_SCRAPER_ENABLED = "true"
