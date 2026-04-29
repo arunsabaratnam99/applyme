@@ -28,52 +28,8 @@ auth.get('/google', (c) => {
 });
 
 auth.get('/google/callback', async (c) => {
-  const { code } = c.req.query();
-  if (!code) return c.json({ error: 'Missing code' }, 400);
-
-  const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
-  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: c.env.OAUTH_GOOGLE_CLIENT_ID,
-      client_secret: c.env.OAUTH_GOOGLE_CLIENT_SECRET,
-      redirect_uri: `${apiBase}/auth/google/callback`,
-      grant_type: 'authorization_code',
-    }),
-  });
-
-  if (!tokenRes.ok) return c.json({ error: 'Token exchange failed' }, 400);
-
-  const tokens = await tokenRes.json() as { access_token: string; id_token: string };
-
-  const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: `Bearer ${tokens.access_token}` },
-  });
-  if (!profileRes.ok) return c.json({ error: 'Profile fetch failed' }, 400);
-
-  const profile = await profileRes.json() as {
-    sub: string; email: string; name: string; picture: string;
-  };
-
-  const db = c.get('db');
-  const user = await upsertUser(db, {
-    provider: 'google',
-    providerId: profile.sub,
-    email: profile.email,
-    name: profile.name,
-    avatarUrl: profile.picture,
-    accessToken: tokens.access_token,
-  });
-
-  const token = await signSession(
-    { sub: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl },
-    c.env.JWT_SECRET,
-  );
-
-  // Parse origin from state
-  const { state } = c.req.query();
+  // Parse origin from state first so we can redirect errors
+  const { state, code } = c.req.query();
   let origin = c.env.APP_BASE_URL;
   try {
     const parsed = JSON.parse(atob(state ?? ''));
@@ -82,8 +38,58 @@ auth.get('/google/callback', async (c) => {
     }
   } catch { /* use default */ }
 
-  const callbackUrl = `${origin}/api/auth/callback?token=${encodeURIComponent(token)}`;
-  return c.redirect(callbackUrl, 302);
+  const redirectError = (msg: string) => c.redirect(`${origin}/api/auth/callback?error=${encodeURIComponent(msg)}`, 302);
+
+  try {
+    if (!code) return redirectError('Missing code');
+
+    const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: c.env.OAUTH_GOOGLE_CLIENT_ID,
+        client_secret: c.env.OAUTH_GOOGLE_CLIENT_SECRET,
+        redirect_uri: `${apiBase}/auth/google/callback`,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    if (!tokenRes.ok) return redirectError('Token exchange failed');
+
+    const tokens = await tokenRes.json() as { access_token: string; id_token: string };
+
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    if (!profileRes.ok) return redirectError('Profile fetch failed');
+
+    const profile = await profileRes.json() as {
+      sub: string; email: string; name: string; picture: string;
+    };
+
+    const db = c.get('db');
+    const user = await upsertUser(db, {
+      provider: 'google',
+      providerId: profile.sub,
+      email: profile.email,
+      name: profile.name,
+      avatarUrl: profile.picture,
+      accessToken: tokens.access_token,
+    });
+
+    const token = await signSession(
+      { sub: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl },
+      c.env.JWT_SECRET,
+    );
+
+    const callbackUrl = `${origin}/api/auth/callback?token=${encodeURIComponent(token)}`;
+    return c.redirect(callbackUrl, 302);
+  } catch (err) {
+    console.error('[google/callback] error:', err);
+    return redirectError(err instanceof Error ? err.message : 'Unknown error');
+  }
 });
 
 // ─── GitHub OAuth ─────────────────────────────────────────────────────────────

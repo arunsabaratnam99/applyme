@@ -4,8 +4,12 @@ const COOKIE_NAME = 'am_session';
 
 export function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token');
+  const error = req.nextUrl.searchParams.get('error');
   if (!token) {
-    return NextResponse.redirect(new URL('/login', req.url));
+    // Redirect to login with error info for debugging
+    const loginUrl = new URL('/login', req.url);
+    if (error) loginUrl.searchParams.set('error', error);
+    return NextResponse.redirect(loginUrl);
   }
 
   // Set the session cookie from the web origin (localhost:3000) so it is
