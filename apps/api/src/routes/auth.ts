@@ -13,9 +13,10 @@ const auth = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 auth.get('/google', (c) => {
   const state = crypto.randomUUID();
+  const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
   const params = new URLSearchParams({
     client_id: c.env.OAUTH_GOOGLE_CLIENT_ID,
-    redirect_uri: `${c.env.APP_BASE_URL.replace('3000', '8787')}/auth/google/callback`,
+    redirect_uri: `${apiBase}/auth/google/callback`,
     response_type: 'code',
     scope: 'openid email profile',
     state,
@@ -29,6 +30,7 @@ auth.get('/google/callback', async (c) => {
   const { code } = c.req.query();
   if (!code) return c.json({ error: 'Missing code' }, 400);
 
+  const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -36,7 +38,7 @@ auth.get('/google/callback', async (c) => {
       code,
       client_id: c.env.OAUTH_GOOGLE_CLIENT_ID,
       client_secret: c.env.OAUTH_GOOGLE_CLIENT_SECRET,
-      redirect_uri: `${c.env.APP_BASE_URL.replace('3000', '8787')}/auth/google/callback`,
+      redirect_uri: `${apiBase}/auth/google/callback`,
       grant_type: 'authorization_code',
     }),
   });
@@ -77,9 +79,10 @@ auth.get('/google/callback', async (c) => {
 
 auth.get('/github', (c) => {
   const state = crypto.randomUUID();
+  const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
   const params = new URLSearchParams({
     client_id: c.env.OAUTH_GITHUB_CLIENT_ID,
-    redirect_uri: `${c.env.APP_BASE_URL.replace('3000', '8787')}/auth/github/callback`,
+    redirect_uri: `${apiBase}/auth/github/callback`,
     scope: 'read:user user:email',
     state,
   });
@@ -90,6 +93,7 @@ auth.get('/github/callback', async (c) => {
   const { code } = c.req.query();
   if (!code) return c.json({ error: 'Missing code' }, 400);
 
+  const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
   const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: {
@@ -100,7 +104,7 @@ auth.get('/github/callback', async (c) => {
       client_id: c.env.OAUTH_GITHUB_CLIENT_ID,
       client_secret: c.env.OAUTH_GITHUB_CLIENT_SECRET,
       code,
-      redirect_uri: `${c.env.APP_BASE_URL.replace('3000', '8787')}/auth/github/callback`,
+      redirect_uri: `${apiBase}/auth/github/callback`,
     }),
   });
 

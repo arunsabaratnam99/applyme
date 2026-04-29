@@ -4,6 +4,7 @@ export interface Env {
   DATABASE_URL: string;
   JWT_SECRET: string;
   APP_BASE_URL: string;
+  API_BASE_URL?: string;
 
   // OAuth
   OAUTH_GOOGLE_CLIENT_ID: string;

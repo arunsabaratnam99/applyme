@@ -5,6 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 APP_BASE_URL = "https://aapplyme.netlify.app"
+API_BASE_URL = "https://applyme-api.arunsabaratnam.workers.dev"
 EMAIL_ENABLED = "false"
 LINKEDIN_SCRAPER_ENABLED = "true"
 INDEED_SCRAPER_ENABLED = "true"
