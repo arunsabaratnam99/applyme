@@ -9,8 +9,60 @@ const LOGO_SOURCES = (domain: string) => [
   `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
 ];
 
+// In-memory cache for company domain lookups (persists across requests in same worker)
+const domainCache = new Map<string, string>();
+
+// Use Clearbit Autocomplete API to find real company domain
+async function lookupCompanyDomain(companyName: string): Promise<string | null> {
+  const cacheKey = companyName.toLowerCase().trim();
+  if (domainCache.has(cacheKey)) {
+    return domainCache.get(cacheKey)!;
+  }
+
+  try {
+    const res = await fetch(
+      `https://autocomplete.clearbit.com/v1/companies/suggest?query=${encodeURIComponent(companyName)}`,
+      { signal: AbortSignal.timeout(3000) }
+    );
+    
+    if (!res.ok) return null;
+    
+    const results = await res.json() as Array<{ name: string; domain: string; logo: string }>;
+    const firstResult = results[0];
+    if (firstResult?.domain) {
+      domainCache.set(cacheKey, firstResult.domain);
+      return firstResult.domain;
+    }
+  } catch {
+    // Clearbit lookup failed, will fall back to guessing
+  }
+  
+  return null;
+}
+
+// Fallback: guess domain from company name
+function guessCompanyDomain(company: string): string {
+  let name = company.toLowerCase().trim();
+  name = name
+    .replace(/\s*(inc\.?|llc\.?|ltd\.?|corp\.?|corporation|company|co\.?|group|holdings|technologies|technology|tech|solutions|services|consulting|partners|&\s*co\.?)$/i, '')
+    .trim();
+  name = name.replace(/^the\s+/i, '');
+  return name.replace(/[^a-z0-9]/g, '') + '.com';
+}
+
 export async function GET(req: NextRequest) {
-  const domain = req.nextUrl.searchParams.get('domain');
+  // Support both ?domain= and ?company= parameters
+  let domain = req.nextUrl.searchParams.get('domain');
+  const company = req.nextUrl.searchParams.get('company');
+  
+  // If company name provided, look up the real domain
+  if (company && !domain) {
+    domain = await lookupCompanyDomain(company);
+    if (!domain) {
+      domain = guessCompanyDomain(company);
+    }
+  }
+  
   if (!domain || !/^[a-zA-Z0-9.-]+$/.test(domain)) {
     return new NextResponse(null, { status: 400 });
   }

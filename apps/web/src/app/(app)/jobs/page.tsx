@@ -101,30 +101,11 @@ const WORKPLACE_TYPES = [
 
 // ─── Company logo helper ──────────────────────────────────────────────────────
 
-function companyToDomain(company: string): string {
-  // Clean up company name: lowercase, trim, remove common suffixes
-  let name = company.toLowerCase().trim();
-  
-  // Remove common corporate suffixes
-  name = name
-    .replace(/\s*(inc\.?|llc\.?|ltd\.?|corp\.?|corporation|company|co\.?|group|holdings|technologies|technology|tech|solutions|services|consulting|partners|&\s*co\.?)$/i, '')
-    .trim();
-  
-  // Remove "the" prefix
-  name = name.replace(/^the\s+/i, '');
-  
-  // Convert to domain: remove spaces and special chars, add .com
-  const domain = name.replace(/[^a-z0-9]/g, '') + '.com';
-  
-  return domain;
-}
-
 function CompanyLogo({ company, size = 40 }: { company: string; size?: number }) {
   const [failed, setFailed] = React.useState(false);
-  const domain = companyToDomain(company);
 
-  // Reset failed state when domain changes
-  React.useEffect(() => { setFailed(false); }, [domain]);
+  // Reset failed state when company changes
+  React.useEffect(() => { setFailed(false); }, [company]);
 
   if (failed) {
     return (
@@ -143,7 +124,7 @@ function CompanyLogo({ company, size = 40 }: { company: string; size?: number })
       className="flex shrink-0 items-center justify-center rounded-lg bg-muted overflow-hidden border border-border/40"
     >
       <img
-        src={`/api/logo?domain=${encodeURIComponent(domain)}`}
+        src={`/api/logo?company=${encodeURIComponent(company)}`}
         alt={company}
         width={size}
         height={size}
