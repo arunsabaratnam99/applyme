@@ -62,6 +62,12 @@ export function clearSessionCookie(): string {
 }
 
 export function getSessionToken(request: Request): string | null {
+  // Check Authorization header first (for cross-origin requests)
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+  // Fall back to cookie
   const cookie = request.headers.get('Cookie') ?? '';
   const match = cookie.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));
   return match?.[1] ?? null;
