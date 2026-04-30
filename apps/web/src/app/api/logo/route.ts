@@ -86,7 +86,10 @@ export async function GET(req: NextRequest) {
         status: 200,
         headers: {
           'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+          // Browser can cache, but CDN should not (to avoid returning wrong logo)
+          'Cache-Control': 'public, max-age=86400',
+          'CDN-Cache-Control': 'no-store',
+          'Netlify-CDN-Cache-Control': 'no-store',
         },
       });
     } catch {
