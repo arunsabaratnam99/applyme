@@ -102,33 +102,21 @@ const WORKPLACE_TYPES = [
 // ─── Company logo helper ──────────────────────────────────────────────────────
 
 function companyToDomain(company: string): string {
-  const overrides: Record<string, string> = {
-    'shopify': 'shopify.com', 'amazon': 'amazon.com', 'google': 'google.com',
-    'microsoft': 'microsoft.com', 'apple': 'apple.com', 'meta': 'meta.com',
-    'netflix': 'netflix.com', 'stripe': 'stripe.com', 'airbnb': 'airbnb.com',
-    'uber': 'uber.com', 'lyft': 'lyft.com', 'twitter': 'twitter.com',
-    'x': 'x.com', 'slack': 'slack.com', 'salesforce': 'salesforce.com',
-    'oracle': 'oracle.com', 'ibm': 'ibm.com', 'intel': 'intel.com',
-    'nvidia': 'nvidia.com', 'td': 'td.com', 'rbc': 'rbc.com',
-    'bmo': 'bmo.com', 'scotiabank': 'scotiabank.com', 'cibc': 'cibc.com',
-    'rogers': 'rogers.com', 'bell': 'bell.ca', 'telus': 'telus.com',
-    'shopify inc': 'shopify.com', 'capital one': 'capitalone.com',
-    'bank of canada': 'bankofcanada.ca', 'cgi': 'cgi.com',
-    'deloitte': 'deloitte.com', 'kpmg': 'kpmg.com', 'pwc': 'pwc.com',
-    'accenture': 'accenture.com', 'sap': 'sap.com', 'adobe': 'adobe.com',
-    'atlassian': 'atlassian.com', 'github': 'github.com', 'gitlab': 'gitlab.com',
-    // Additional companies
-    'borgwarner': 'borgwarner.com', 'd-matrix': 'd-matrix.ai',
-    'the new york times': 'nytimes.com', 'new york times': 'nytimes.com', 'nyt': 'nytimes.com',
-    'fiserv': 'fiserv.com', 'gelber group': 'gelbergroup.com',
-    'jpmorgan': 'jpmorgan.com', 'jp morgan': 'jpmorgan.com', 'chase': 'chase.com',
-    'goldman sachs': 'goldmansachs.com', 'morgan stanley': 'morganstanley.com',
-    'citadel': 'citadel.com', 'two sigma': 'twosigma.com', 'jane street': 'janestreet.com',
-  };
-  const key = company.toLowerCase().trim();
-  if (overrides[key]) return overrides[key];
-  // Generic: company name → domain guess
-  return key.replace(/[^a-z0-9]/g, '') + '.com';
+  // Clean up company name: lowercase, trim, remove common suffixes
+  let name = company.toLowerCase().trim();
+  
+  // Remove common corporate suffixes
+  name = name
+    .replace(/\s*(inc\.?|llc\.?|ltd\.?|corp\.?|corporation|company|co\.?|group|holdings|technologies|technology|tech|solutions|services|consulting|partners|&\s*co\.?)$/i, '')
+    .trim();
+  
+  // Remove "the" prefix
+  name = name.replace(/^the\s+/i, '');
+  
+  // Convert to domain: remove spaces and special chars, add .com
+  const domain = name.replace(/[^a-z0-9]/g, '') + '.com';
+  
+  return domain;
 }
 
 function CompanyLogo({ company, size = 40 }: { company: string; size?: number }) {
