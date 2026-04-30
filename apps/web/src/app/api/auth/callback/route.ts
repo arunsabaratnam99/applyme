@@ -14,7 +14,9 @@ export function GET(req: NextRequest) {
 
   // Set the session cookie from the web origin. Not httpOnly so JS can read it
   // and send as Authorization header for cross-origin API requests.
-  const res = NextResponse.redirect(new URL('/jobs', req.url));
+  const jobsUrl = new URL('/jobs', req.url);
+  jobsUrl.search = ''; // Clear query params
+  const res = NextResponse.redirect(jobsUrl);
   res.cookies.set(COOKIE_NAME, token, {
     httpOnly: false,
     sameSite: 'lax',
