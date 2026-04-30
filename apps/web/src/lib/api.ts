@@ -12,6 +12,9 @@ function getSessionToken(): string | null {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getSessionToken();
+  if (typeof window !== 'undefined') {
+    console.log('[api] token from cookie:', token ? 'found' : 'not found', 'cookies:', document.cookie.substring(0, 100));
+  }
   const init: RequestInit = {
     ...options,
     credentials: 'include',
