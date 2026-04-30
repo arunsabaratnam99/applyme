@@ -105,7 +105,7 @@ const CompanyLogo = React.memo(function CompanyLogo({ company, size = 40 }: { co
   const [failed, setFailed] = React.useState(false);
   
   // Create a unique URL for each company
-  const logoUrl = `/api/logo?company=${encodeURIComponent(company)}&v=2`;
+  const logoUrl = `/api/logo?company=${encodeURIComponent(company)}&v=3`;
 
   // Reset failed state when company changes
   React.useEffect(() => { setFailed(false); }, [company]);
