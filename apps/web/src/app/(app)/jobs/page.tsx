@@ -101,8 +101,11 @@ const WORKPLACE_TYPES = [
 
 // ─── Company logo helper ──────────────────────────────────────────────────────
 
-function CompanyLogo({ company, size = 40 }: { company: string; size?: number }) {
+const CompanyLogo = React.memo(function CompanyLogo({ company, size = 40 }: { company: string; size?: number }) {
   const [failed, setFailed] = React.useState(false);
+  
+  // Create a unique URL for each company
+  const logoUrl = `/api/logo?company=${encodeURIComponent(company)}&v=2`;
 
   // Reset failed state when company changes
   React.useEffect(() => { setFailed(false); }, [company]);
@@ -124,7 +127,7 @@ function CompanyLogo({ company, size = 40 }: { company: string; size?: number })
       className="flex shrink-0 items-center justify-center rounded-lg bg-muted overflow-hidden border border-border/40"
     >
       <img
-        src={`/api/logo?company=${encodeURIComponent(company)}`}
+        src={logoUrl}
         alt={company}
         width={size}
         height={size}
@@ -133,7 +136,7 @@ function CompanyLogo({ company, size = 40 }: { company: string; size?: number })
       />
     </div>
   );
-}
+});
 
 // ─── Date filter options ──────────────────────────────────────────────────────
 
