@@ -117,6 +117,13 @@ function companyToDomain(company: string): string {
     'deloitte': 'deloitte.com', 'kpmg': 'kpmg.com', 'pwc': 'pwc.com',
     'accenture': 'accenture.com', 'sap': 'sap.com', 'adobe': 'adobe.com',
     'atlassian': 'atlassian.com', 'github': 'github.com', 'gitlab': 'gitlab.com',
+    // Additional companies
+    'borgwarner': 'borgwarner.com', 'd-matrix': 'd-matrix.ai',
+    'the new york times': 'nytimes.com', 'new york times': 'nytimes.com', 'nyt': 'nytimes.com',
+    'fiserv': 'fiserv.com', 'gelber group': 'gelbergroup.com',
+    'jpmorgan': 'jpmorgan.com', 'jp morgan': 'jpmorgan.com', 'chase': 'chase.com',
+    'goldman sachs': 'goldmansachs.com', 'morgan stanley': 'morganstanley.com',
+    'citadel': 'citadel.com', 'two sigma': 'twosigma.com', 'jane street': 'janestreet.com',
   };
   const key = company.toLowerCase().trim();
   if (overrides[key]) return overrides[key];
@@ -127,6 +134,9 @@ function companyToDomain(company: string): string {
 function CompanyLogo({ company, size = 40 }: { company: string; size?: number }) {
   const [failed, setFailed] = React.useState(false);
   const domain = companyToDomain(company);
+
+  // Reset failed state when domain changes
+  React.useEffect(() => { setFailed(false); }, [domain]);
 
   if (failed) {
     return (
