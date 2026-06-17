@@ -3,8 +3,7 @@
 import React from 'react';
 import useSWR, { mutate } from 'swr';
 import {
-  Star, Plus, Trash2, ChevronDown, ChevronRight,
-  Bell, BellOff, Briefcase, TrendingUp, Users, Building2, X,
+  Star, Plus, Trash2, ChevronDown, ChevronRight, Building2, X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,10 +21,6 @@ interface WatchlistItem {
   companyTier: 'tier1' | 'standard';
   autoDiscoverPeers: boolean;
   atsUrl: string | null;
-  notifyNewJobs: boolean;
-  notifyRoleChanges: boolean;
-  notifyFunding: boolean;
-  notifyHeadcount: boolean;
 }
 
 interface PeerEntry {
@@ -47,17 +42,6 @@ interface ClearbitCompany {
   logo: string;
 }
 
-/* ── Notification options config ─────────────────────────────── */
-
-const NOTIF_OPTIONS = [
-  { key: 'notifyNewJobs',      icon: <Briefcase className="h-3.5 w-3.5" />, label: 'New jobs' },
-  { key: 'notifyRoleChanges',  icon: <Users className="h-3.5 w-3.5" />,    label: 'Role changes' },
-  { key: 'notifyFunding',      icon: <TrendingUp className="h-3.5 w-3.5" />, label: 'Funding news' },
-  { key: 'notifyHeadcount',    icon: <Building2 className="h-3.5 w-3.5" />, label: 'Headcount' },
-] as const;
-
-type NotifKey = (typeof NOTIF_OPTIONS)[number]['key'];
-
 const KEY = '/api/watchlist';
 
 /* ── Page ────────────────────────────────────────────────────── */
@@ -77,10 +61,6 @@ export default function WatchlistPage() {
       companyTier: 'standard',
       autoDiscoverPeers: false,
       atsUrl: null,
-      notifyNewJobs: true,
-      notifyRoleChanges: false,
-      notifyFunding: false,
-      notifyHeadcount: false,
     };
     // Close search first so the new card doesn't flash under the open panel
     setShowSearch(false);
@@ -145,10 +125,6 @@ export default function WatchlistPage() {
       companyTier: 'standard',
       autoDiscoverPeers: false,
       atsUrl: null,
-      notifyNewJobs: true,
-      notifyRoleChanges: false,
-      notifyFunding: false,
-      notifyHeadcount: false,
     };
     await mutate(
       KEY,
@@ -179,29 +155,6 @@ export default function WatchlistPage() {
     }
   }
 
-  const DEFAULT_NOTIFS: Record<NotifKey, boolean> = {
-    notifyNewJobs: true,
-    notifyRoleChanges: false,
-    notifyFunding: false,
-    notifyHeadcount: false,
-  };
-
-  const [localNotifs, setLocalNotifs] = React.useState<Record<string, Record<NotifKey, boolean>>>({});
-
-  function getNotifs(id: string): Record<NotifKey, boolean> {
-    return localNotifs[id] ?? DEFAULT_NOTIFS;
-  }
-
-  function handleToggleNotif(id: string, notifKey: NotifKey, current: boolean) {
-    setLocalNotifs((prev) => ({
-      ...prev,
-      [id]: {
-        ...(prev[id] ?? DEFAULT_NOTIFS),
-        [notifKey]: !current,
-      },
-    }));
-  }
-
   const watchedNames = new Set(data?.items.map((i) => i.value.toLowerCase()) ?? []);
 
   return (
@@ -215,7 +168,7 @@ export default function WatchlistPage() {
             Watchlist
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Track companies and get notified about new jobs, funding, and headcount changes
+            Track companies and discover similar employers
           </p>
         </div>
         {!showSearch && (
@@ -260,7 +213,7 @@ export default function WatchlistPage() {
         <div className="text-center py-20 text-muted-foreground">
           <Star className="h-10 w-10 mx-auto mb-4 opacity-25" />
           <p className="font-medium">Your watchlist is empty</p>
-          <p className="text-sm mt-1 mb-4">Add companies to track jobs, funding, and team changes.</p>
+          <p className="text-sm mt-1 mb-4">Add companies to track and discover peer employers.</p>
           <Button size="sm" onClick={() => setShowSearch(true)} className="gap-1.5">
             <Plus className="h-4 w-4" /> Add your first company
           </Button>
@@ -273,7 +226,6 @@ export default function WatchlistPage() {
           {data.items.map((item) => {
             const peers = data.peerMap[item.id] ?? [];
             const isExpanded = expandedId === item.id;
-            const activeNotifs = NOTIF_OPTIONS.filter((o) => item[o.key]);
 
             return (
               <div
@@ -297,42 +249,21 @@ export default function WatchlistPage() {
                         <Badge variant="warning" className="text-[10px] py-0 px-1.5">Tier 1</Badge>
                       )}
                     </div>
-                    {/* Active notification pills */}
-                    {(() => {
-                      const notifs = getNotifs(item.id);
-                      const active = NOTIF_OPTIONS.filter((o) => notifs[o.key]);
-                      return active.length > 0 ? (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {active.map((o) => (
-                            <span
-                              key={o.key}
-                              className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-medium"
-                            >
-                              {o.icon}
-                              {o.label}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                          <BellOff className="h-3 w-3" /> No notifications
-                        </span>
-                      );
-                    })()}
                   </div>
 
                   {/* Controls */}
                   <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2.5 text-xs gap-1.5 text-muted-foreground"
-                      onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                    >
-                      <Bell className="h-3.5 w-3.5" />
-                      Notify
-                      <ChevronDown className={cn('h-3 w-3 transition-transform', isExpanded && 'rotate-180')} />
-                    </Button>
+                    {peers.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2.5 text-xs gap-1.5 text-muted-foreground"
+                        onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                      >
+                        Peers
+                        <ChevronDown className={cn('h-3 w-3 transition-transform', isExpanded && 'rotate-180')} />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -344,46 +275,10 @@ export default function WatchlistPage() {
                   </div>
                 </div>
 
-                {/* Expanded: notification toggles + peer companies */}
-                {isExpanded && (
+                {/* Expanded: peer companies */}
+                {isExpanded && peers.length > 0 && (
                   <div className="border-t border-border bg-muted/30 px-4 py-4 space-y-4">
-                    {/* Notification toggles */}
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">
-                        Notify me about
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {NOTIF_OPTIONS.map((opt) => {
-                          const notifs = getNotifs(item.id);
-                          const active = notifs[opt.key];
-                          return (
-                            <button
-                              key={opt.key}
-                              type="button"
-                              onClick={() => handleToggleNotif(item.id, opt.key, active)}
-                              className={cn(
-                                'flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all text-left',
-                                active
-                                  ? 'border-primary bg-primary/10 text-primary'
-                                  : 'border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground',
-                              )}
-                            >
-                              <span className={cn('shrink-0', active ? 'text-primary' : 'text-muted-foreground')}>
-                                {opt.icon}
-                              </span>
-                              {opt.label}
-                              {active && (
-                                <span className="ml-auto h-2 w-2 rounded-full bg-primary shrink-0" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Peer companies */}
-                    {peers.length > 0 && (
-                      <div>
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">
                           Similar companies
                         </p>
@@ -415,8 +310,7 @@ export default function WatchlistPage() {
                             );
                           })}
                         </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 )}
               </div>

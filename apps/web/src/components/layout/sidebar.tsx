@@ -7,26 +7,17 @@ import {
   Briefcase,
   Star,
   Send,
-  FileText,
-  Bell,
   Settings,
   Layers,
-  Zap,
-  ClipboardList,
-  FileEdit,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 
 const NAV_ITEMS = [
   { href: '/jobs', label: 'Jobs', icon: Briefcase },
-  { href: '/matches', label: 'Matches', icon: Zap },
   { href: '/watchlist', label: 'Watchlist', icon: Star },
   { href: '/applications', label: 'Applied', icon: Send },
-  { href: '/drafts', label: 'Drafts', icon: FileEdit },
-  { href: '/apply-queue', label: 'Queue', icon: ClipboardList },
   { href: '/autofill-profiles', label: 'Autofill Profiles', icon: Layers },
-  { href: '/notifications', label: 'Notifications', icon: Bell },
   { href: '/settings', label: 'Settings', icon: Settings },
 ] as const;
 

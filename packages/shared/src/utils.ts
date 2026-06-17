@@ -1,5 +1,3 @@
-import type { NotificationPrefs } from './types/index.js';
-
 // Fields that must never appear in logs
 export const PII_FIELDS = [
   'email',
@@ -98,45 +96,6 @@ export function normalizeLocation(location: string): string {
     return 'CA-remote';
   }
   return location.trim();
-}
-
-/**
- * Returns true if the current time is within the user's configured quiet hours.
- * quietStart and quietEnd are "HH:MM" strings in the user's local time.
- */
-export function isInQuietHours(prefs: NotificationPrefs, nowHour: number, nowMinute: number): boolean {
-  if (!prefs.quietStart || !prefs.quietEnd) return false;
-
-  const [startH, startM] = prefs.quietStart.split(':').map(Number) as [number, number];
-  const [endH, endM] = prefs.quietEnd.split(':').map(Number) as [number, number];
-
-  const nowTotal = nowHour * 60 + nowMinute;
-  const startTotal = startH * 60 + startM;
-  const endTotal = endH * 60 + endM;
-
-  // Handle overnight ranges (e.g. 22:00 – 08:00)
-  if (startTotal > endTotal) {
-    return nowTotal >= startTotal || nowTotal <= endTotal;
-  }
-  return nowTotal >= startTotal && nowTotal <= endTotal;
-}
-
-/**
- * Generates a draft expiry date (30 days from now).
- */
-export function draftExpiresAt(): Date {
-  const d = new Date();
-  d.setDate(d.getDate() + 30);
-  return d;
-}
-
-/**
- * Generates an autofill queue item expiry date (72 hours from now).
- */
-export function queueExpiresAt(): Date {
-  const d = new Date();
-  d.setHours(d.getHours() + 72);
-  return d;
 }
 
 /**

@@ -187,7 +187,7 @@ export default function AutofillProfilesPage() {
                       role="switch"
                       aria-checked={draft.enabled}
                       onClick={() => updateDraft(profile.atsType, { enabled: !draft.enabled })}
-                      title={draft.enabled ? 'Disable Quick Apply for this ATS' : 'Enable Quick Apply for this ATS'}
+                      title={draft.enabled ? 'Disable autofill for this ATS' : 'Enable autofill for this ATS'}
                       className={cn(
                         'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none',
                         draft.enabled ? 'bg-primary' : 'bg-muted-foreground/30',
@@ -375,7 +375,7 @@ export default function AutofillProfilesPage() {
           <div className="text-center py-16 text-muted-foreground text-sm">
             <Zap className="h-8 w-8 mx-auto mb-3 opacity-30" />
             <p className="font-medium">No profiles yet</p>
-            <p className="mt-1">Use Quick Apply on a job to start building your autofill profiles.</p>
+            <p className="mt-1">Configure saved answers for each ATS type you apply to.</p>
           </div>
         )}
       </div>

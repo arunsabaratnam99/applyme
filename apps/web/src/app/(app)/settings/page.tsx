@@ -6,7 +6,7 @@ import {
   User, FileText, Briefcase, Tag, AlertTriangle,
   LogOut, Save, ChevronRight, Globe, DollarSign,
   Camera, Download, Loader2, CheckCircle2, Eye, Lock,
-  Zap, Linkedin, Github, Link2, RefreshCw, Database, Mail, X, Plus, ClipboardList, ChevronDown,
+  Linkedin, Github, Link2, RefreshCw, Database, Mail, X, Plus, ClipboardList, ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
@@ -121,7 +121,7 @@ interface FormState {
   disabilityStatus: string;
 }
 
-type TabId = 'profile' | 'appinfo' | 'resume' | 'preferences' | 'keywords' | 'quickapply' | 'data' | 'danger';
+type TabId = 'profile' | 'appinfo' | 'resume' | 'preferences' | 'keywords' | 'data' | 'danger';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'profile',     label: 'Profile',       icon: <User className="h-4 w-4" /> },
@@ -129,7 +129,6 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'resume',      label: 'Resume',        icon: <FileText className="h-4 w-4" /> },
   { id: 'preferences', label: 'Job Prefs',     icon: <Briefcase className="h-4 w-4" /> },
   { id: 'keywords',    label: 'Keywords',      icon: <Tag className="h-4 w-4" /> },
-  { id: 'quickapply',  label: 'Quick Apply',   icon: <Zap className="h-4 w-4" /> },
   { id: 'data',        label: 'Data',          icon: <Database className="h-4 w-4" /> },
   { id: 'danger',      label: 'Danger Zone',   icon: <AlertTriangle className="h-4 w-4" /> },
 ];
@@ -664,7 +663,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <FieldRow label="Display name" hint="Used in autofill and application drafts">
+                <FieldRow label="Display name" hint="Shown on your profile">
                   <TextInput
                     value={form.displayName}
                     onChange={(v) => setForm({ ...form, displayName: v })}
@@ -1370,39 +1369,6 @@ export default function SettingsPage() {
                     <li>Include keywords in the job title → +15 score</li>
                     <li>Include keywords in description → +5 score</li>
                     <li>Exclude keywords anywhere → job is hidden</li>
-                  </ul>
-                </div>
-
-                <SaveBar saving={saving} />
-              </Section>
-            )}
-
-            {/* ── Quick Apply tab ── */}
-            {activeTab === 'quickapply' && (
-              <Section title="Quick Apply" description="Control how the extension auto-applies to jobs on your behalf.">
-                <ToggleRow
-                  label="Autofill All"
-                  hint="When on, Quick Apply will automatically fill and submit applications for all ATS types. Turn off individual ATS types in Autofill Profiles."
-                  checked={form.quickApplyAll}
-                  onChange={(v) => setForm({ ...form, quickApplyAll: v })}
-                />
-
-                <ToggleRow
-                  label="Tier 1 Companies"
-                  hint="Allow Quick Apply for top-tier companies (Google, Meta, Amazon, etc). Off by default — enable only if you want fully automated applies to these companies."
-                  checked={form.tier1QuickApply}
-                  onChange={(v) => setForm({ ...form, tier1QuickApply: v })}
-                  cautionWhenOn
-                />
-
-                <div className="rounded-xl border border-border bg-muted/30 p-4">
-                  <p className="text-sm font-medium mb-1">How Quick Apply works</p>
-                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-                    <li>Click Quick Apply on any job → extension fills the form automatically</li>
-                    <li>A cover letter is generated using your profile and the job description</li>
-                    <li>If all required fields are filled, the form is submitted automatically</li>
-                    <li>Unfilled required fields are saved to Autofill Profiles for you to answer</li>
-                    <li>Any errors are reported in Notifications</li>
                   </ul>
                 </div>
 

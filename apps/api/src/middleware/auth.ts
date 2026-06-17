@@ -94,5 +94,6 @@ export const requireAuth = createMiddleware<{ Bindings: Env; Variables: Variable
     });
 
     await next();
+    return;
   },
 );

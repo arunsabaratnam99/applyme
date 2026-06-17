@@ -35,14 +35,6 @@ export const ApplicationStatusSchema = z.enum([
   'rejected',
   'withdrawn',
 ]);
-export const DraftStatusSchema = z.enum(['pending', 'approved', 'sent', 'queued_autofill']);
-export const AutofillQueueStatusSchema = z.enum([
-  'pending',
-  'opened',
-  'completed',
-  'failed',
-  'expired',
-]);
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
@@ -133,35 +125,7 @@ export const JobsQuerySchema = z.object({
   workplaceType: WorkplaceTypeSchema.optional(),
 });
 
-// ─── Matches ─────────────────────────────────────────────────────────────────
-
-export const MatchesQuerySchema = z.object({
-  page: z.coerce.number().int().positive().optional().default(1),
-  limit: z.coerce.number().int().positive().max(50).optional().default(20),
-  minScore: z.coerce.number().min(0).max(100).optional(),
-});
-
-// ─── Drafts ──────────────────────────────────────────────────────────────────
-
-export const CreateDraftSchema = z.object({
-  jobId: z.string().uuid(),
-  resumeVersionId: z.string().uuid(),
-  coverLetter: z.string().min(1).max(5000),
-  qaBundle: z.object({
-    answers: z.array(z.object({
-      question: z.string(),
-      answer: z.string(),
-      fieldKey: z.string(),
-    })),
-  }),
-});
-
-export const ApproveDraftSchema = z.object({
-  resumeVersionId: z.string().uuid().optional(),
-  coverLetter: z.string().max(5000).optional(),
-});
-
-// ─── Applications ─────────────────────────────────────────────────────────────
+// ─── Jobs ─────────────────────────────────────────────────────────────────────
 
 export const CreateApplicationSchema = z.object({
   jobId: z.string().uuid(),
@@ -198,22 +162,6 @@ export const UpdateWatchlistItemSchema = z.object({
   atsUrl: z.string().url().nullable().optional(),
 });
 
-// ─── Notifications ────────────────────────────────────────────────────────────
-
-export const PushSubscribeSchema = z.object({
-  endpoint: z.string().url(),
-  p256dh: z.string().min(1),
-  auth: z.string().min(1),
-});
-
-export const UpdateNotificationPrefsSchema = z.object({
-  pushEnabled: z.boolean().optional(),
-  emailEnabled: z.boolean().optional(),
-  quietStart: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
-  quietEnd: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
-  digestMode: z.boolean().optional(),
-});
-
 // ─── Autofill Profiles ────────────────────────────────────────────────────────────
 
 export const UnknownFieldSchema = z.object({
@@ -233,22 +181,8 @@ export const ReportUnknownFieldSchema = z.object({
   label: z.string(),
 });
 
-export const AutofillErrorSchema = z.object({
-  errorDetail: z.string().max(2000),
-});
-
-export const QuickApplySchema = z.object({
-  resumeVersionId: z.string().uuid().optional(),
-});
-
 export const ToggleAllAutofillSchema = z.object({
   enabled: z.boolean(),
-});
-
-// ─── Autofill Queue ────────────────────────────────────────────────────────────
-
-export const CompleteAutofillSchema = z.object({
-  submittedFields: z.record(z.string()),
 });
 
 export const LearnFieldsSchema = z.object({

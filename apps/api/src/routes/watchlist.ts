@@ -165,16 +165,6 @@ watchlist.post('/items/:id/peers/:peer/add', async (c) => {
     })
     .returning();
 
-  await db.insert(schema.notifications).values({
-    userId,
-    type: 'peer_added',
-    payload: {
-      message: `Added ${peerName} to your watchlist because you watch ${anchorItem.value}`,
-      anchorCompany: anchorItem.value,
-      peerCompany: peerName,
-    },
-  });
-
   return c.json({ item: newItem }, 201);
 });
 

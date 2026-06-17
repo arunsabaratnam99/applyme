@@ -227,8 +227,6 @@ async function upsertUser(
     await db.insert(schema.userProfiles).values({ userId: user.id }).onConflictDoNothing();
     // Create default watchlist
     await db.insert(schema.watchlists).values({ userId: user.id, label: 'My Watchlist' });
-    // Create default notification prefs
-    await db.insert(schema.notificationPrefs).values({ userId: user.id }).onConflictDoNothing();
   }
 
   // Link identity

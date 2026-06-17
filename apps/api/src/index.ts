@@ -7,11 +7,10 @@ import { requireAuth } from './middleware/auth.js';
 import { auth } from './routes/auth.js';
 import { profile } from './routes/profile.js';
 import { resumes } from './routes/resumes.js';
-import { jobs, matches } from './routes/jobs.js';
-import { drafts, applications, autofillQueue } from './routes/applications.js';
+import { jobs } from './routes/jobs.js';
+import { applications } from './routes/applications.js';
 import { autofillProfiles } from './routes/autofill-profiles.js';
 import { watchlist } from './routes/watchlist.js';
-import { notifications } from './routes/notifications.js';
 import { runCronTick } from './cron/tick.js';
 import { SEARCH_QUERIES, MAX_QUERIES } from './connectors/linkedin_scraper.js';
 import { eq, like } from 'drizzle-orm';
@@ -113,13 +112,9 @@ app.use('/api/*', requireAuth);
 app.route('/api/profile', profile);
 app.route('/api/resumes', resumes);
 app.route('/api/jobs', jobs);
-app.route('/api/matches', matches);
-app.route('/api/drafts', drafts);
 app.route('/api/applications', applications);
-app.route('/api/autofill-queue', autofillQueue);
 app.route('/api/autofill-profiles', autofillProfiles);
 app.route('/api/watchlist', watchlist);
-app.route('/api/notifications', notifications);
 
 // ─── Admin: refresh status + manual trigger (auth-protected) ─────────────────
 
