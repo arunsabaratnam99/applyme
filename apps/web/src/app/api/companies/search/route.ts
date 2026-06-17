@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/lib/server-auth';
 
 interface LogoDevResult {
   name: string;
@@ -6,6 +7,9 @@ interface LogoDevResult {
 }
 
 export async function GET(req: NextRequest) {
+  const session = await requireSession(req);
+  if (session instanceof NextResponse) return session;
+
   const q = req.nextUrl.searchParams.get('q')?.trim();
   if (!q) return NextResponse.json([]);
 

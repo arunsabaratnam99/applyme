@@ -1247,7 +1247,7 @@ function JobDetailPanel({ job, onClose, resolvedUrls }: { job: Job; onClose: () 
   const needsFetch = !job.descriptionPlain.trim();
   const { data: fetchedDesc, isLoading: descLoading } = useSWR<{ text: string }>(
     needsFetch ? `/api/jobs/description?url=${encodeURIComponent(job.jobUrl)}` : null,
-    (url: string) => fetch(url).then((r) => r.json() as Promise<{ text: string }>),
+    (url: string) => fetch(url, { credentials: 'include' }).then((r) => r.json() as Promise<{ text: string }>),
   );
 
   const descriptionText = job.descriptionPlain.trim() || fetchedDesc?.text?.trim() || '';
@@ -1261,6 +1261,7 @@ function JobDetailPanel({ job, onClose, resolvedUrls }: { job: Job; onClose: () 
     descriptionText ? ['keywords-extract', job.id] : null,
     () => fetch('/api/keywords/extract', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: descriptionText.slice(0, 6000) }),
     }).then((r) => r.ok ? r.json() : { keywords: [] }),

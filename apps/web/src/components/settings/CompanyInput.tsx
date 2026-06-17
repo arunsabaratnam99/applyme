@@ -169,7 +169,7 @@ export function CompanyInput({ value, onChange, placeholder = 'Acme Corp', class
       return;
     }
     const controller = new AbortController();
-    fetch(`/api/companies/search?q=${encodeURIComponent(value)}`, { signal: controller.signal })
+    fetch(`/api/companies/search?q=${encodeURIComponent(value)}`, { credentials: 'include', signal: controller.signal })
       .then((r) => r.ok ? r.json() : [])
       .then((data: Company[]) => {
         const match = data.find((c) => c.name.toLowerCase() === value.toLowerCase()) ?? data[0];
@@ -222,7 +222,7 @@ export function CompanyInput({ value, onChange, placeholder = 'Acme Corp', class
     abortRef.current = controller;
     setLoading(true);
     try {
-      const res = await fetch(`/api/companies/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+      const res = await fetch(`/api/companies/search?q=${encodeURIComponent(q)}`, { credentials: 'include', signal: controller.signal });
       if (!res.ok) throw new Error();
       const data = (await res.json()) as Company[];
       if (data.length > 0) setResults(data);

@@ -4,6 +4,8 @@ import { logger } from 'hono/logger';
 import { createDb, createPool, schema } from '@applyme/db';
 import { withDb } from './middleware/db.js';
 import { requireAuth } from './middleware/auth.js';
+import { requireAdmin, requireCronSecret } from './middleware/admin.js';
+import { corsOrigin } from './utils/origin.js';
 import { auth } from './routes/auth.js';
 import { profile } from './routes/profile.js';
 import { resumes } from './routes/resumes.js';
@@ -28,16 +30,8 @@ app.use(
   '*',
   cors({
     origin: (origin, c) => {
-      const appBase = c.env?.APP_BASE_URL ?? 'http://localhost:3000';
-      if (!origin) return appBase;
-      // Allow localhost in dev
-      const isDev = appBase.startsWith('http://localhost') || appBase.startsWith('http://127.0.0.1');
-      if (isDev && (origin.includes('localhost') || origin.includes('127.0.0.1'))) return origin;
-      // Allow exact match
-      if (origin === appBase) return origin;
-      // Allow Netlify deploy previews (*.netlify.app)
-      if (origin.endsWith('.netlify.app')) return origin;
-      return null;
+      const env = c.env ?? { APP_BASE_URL: 'http://localhost:3000' };
+      return corsOrigin(origin, env);
     },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
@@ -57,7 +51,7 @@ app.route('/auth', auth);
 
 // ─── Admin: manual cron trigger (dev + on-demand) ─────────────────────────────
 
-app.post('/api/admin/cron', async (c) => {
+app.post('/api/admin/cron', requireCronSecret, async (c) => {
   try {
     await runCronTick(c.env);
     return c.json({ ok: true });
@@ -69,7 +63,7 @@ app.post('/api/admin/cron', async (c) => {
 
 // ─── Admin: test-apply (dev only — triggers attemptApply directly) ────────────
 
-app.post('/api/admin/test-apply', async (c) => {
+app.post('/api/admin/test-apply', requireCronSecret, async (c) => {
   try {
     const body = await c.req.json() as {
       applyUrl: string;
@@ -137,6 +131,23 @@ app.get('/api/admin/refresh-status', async (c) => {
 
 app.post('/api/admin/refresh', async (c) => {
   try {
+    const pool = createPool(c.env.DATABASE_URL);
+    const db = createDb(pool);
+    try {
+      const sources = await db.query.jobSources.findMany({
+        where: eq(schema.jobSources.enabled, true),
+      });
+      const latest = sources
+        .map((s: { lastFetchedAt: Date | null }) => s.lastFetchedAt)
+        .filter((d: Date | null): d is Date => d instanceof Date)
+        .sort((a: Date, b: Date) => b.getTime() - a.getTime())[0] ?? null;
+      if (latest && Date.now() - latest.getTime() < 5 * 60 * 1000) {
+        return c.json({ error: 'Refresh cooldown — try again in a few minutes' }, 429);
+      }
+    } finally {
+      await pool.end();
+    }
+
     await runCronTick(c.env, '*/15 * * * *');
     return c.json({ ok: true });
   } catch (err) {
@@ -147,7 +158,7 @@ app.post('/api/admin/refresh', async (c) => {
 
 // ─── Admin: backfill LinkedIn apply URLs for existing DB rows ────────────────
 
-app.post('/api/admin/backfill-linkedin-urls', async (c) => {
+app.post('/api/admin/backfill-linkedin-urls', requireAdmin, async (c) => {
   const db = c.get('db');
   try {
     const liJobs = await db.query.jobs.findMany({
@@ -185,7 +196,7 @@ app.post('/api/admin/backfill-linkedin-urls', async (c) => {
   }
 });
 
-app.get('/api/admin/linkedin-queries', (c) => {
+app.get('/api/admin/linkedin-queries', requireAdmin, (c) => {
   return c.json({
     maxQueries: MAX_QUERIES,
     active: SEARCH_QUERIES.length,

@@ -238,13 +238,24 @@ function showStatusBanner(message: string, type: 'success' | 'warning' | 'error'
     font-family: system-ui, sans-serif; font-size: 13px; max-width: 340px;
     display: flex; flex-direction: column; gap: 6px;
   `;
-  banner.innerHTML = `
-    <div style="font-weight:600;font-size:14px;">ApplyMe</div>
-    <div style="opacity:.9;font-size:12px;line-height:1.4;">${message}</div>
-    <button id="applyme-dismiss-btn" style="margin-top:4px;align-self:flex-start;background:rgba(255,255,255,.25);color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;">Dismiss</button>
-  `;
+
+  const title = document.createElement('div');
+  title.textContent = 'ApplyMe';
+  title.style.cssText = 'font-weight:600;font-size:14px;';
+
+  const body = document.createElement('div');
+  body.textContent = message;
+  body.style.cssText = 'opacity:.9;font-size:12px;line-height:1.4;';
+
+  const dismissBtn = document.createElement('button');
+  dismissBtn.id = 'applyme-dismiss-btn';
+  dismissBtn.textContent = 'Dismiss';
+  dismissBtn.style.cssText =
+    'margin-top:4px;align-self:flex-start;background:rgba(255,255,255,.25);color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;';
+
+  banner.append(title, body, dismissBtn);
   document.body.appendChild(banner);
-  document.getElementById('applyme-dismiss-btn')?.addEventListener('click', () => banner.remove());
+  dismissBtn.addEventListener('click', () => banner.remove());
   if (type === 'success') setTimeout(() => banner.remove(), 5000);
 }
 
