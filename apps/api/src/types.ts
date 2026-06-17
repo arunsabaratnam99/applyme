@@ -5,6 +5,10 @@ export interface Env {
   JWT_SECRET: string;
   APP_BASE_URL: string;
   API_BASE_URL?: string;
+  /** Comma-separated extra allowed web origins (e.g. https://applyme.ca) */
+  ALLOWED_ORIGINS?: string;
+  /** Comma-separated admin emails for destructive admin routes */
+  ADMIN_EMAILS?: string;
 
   // OAuth
   OAUTH_GOOGLE_CLIENT_ID: string;

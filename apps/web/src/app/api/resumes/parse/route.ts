@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { extractText, extractLinks, getDocumentProxy } from 'unpdf';
+import { requireSession } from '@/lib/server-auth';
 
 // ─── Lookup tables ──────────────────────────────────────────────────────────
 
@@ -684,6 +685,9 @@ function inferEducation(lines: string[]): EducationEntry[] {
 // ─── Route handler ───────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const session = await requireSession(req);
+  if (session instanceof NextResponse) return session;
+
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
@@ -739,9 +743,13 @@ export async function POST(req: NextRequest) {
     let keywords: string[] = inferKeywords(text);
     try {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+      const cookie = req.cookies.get('am_session')?.value;
       const kwRes = await fetch(`${baseUrl}/api/keywords/extract`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(cookie ? { Cookie: `am_session=${cookie}` } : {}),
+        },
         body: JSON.stringify({ text: text.slice(0, 6000) }),
       });
       if (kwRes.ok) {
@@ -757,21 +765,6 @@ export async function POST(req: NextRequest) {
     const workExperience = inferWorkExperience(lines);
     const education      = inferEducation(lines);
     const yearsOfExperience = workExperience.length > 0 ? Math.round(computeYearsOfExperience(workExperience)) : undefined;
-
-    console.log('\n========== RESUME PARSE DEBUG ==========');
-    console.log('[text] first 800 chars:\n', text.slice(0, 800));
-    console.log('[lines] first 30 lines:\n', lines.slice(0, 30));
-    console.log('[pdfLinks]', pdfLinks);
-    console.log('[name]', { displayName, firstName, lastName });
-    console.log('[contact]', { email, phone });
-    console.log('[links]', { linkedinUrl, githubUrl, websiteUrl });
-    console.log('[location]', { locations, location });
-    console.log('[roles]', roles);
-    console.log('[keywords]', keywords?.slice(0, 10));
-    console.log('[workExperience]', JSON.stringify(workExperience, null, 2));
-    console.log('[education]', JSON.stringify(education, null, 2));
-    console.log('[yearsOfExperience]', yearsOfExperience);
-    console.log('=========================================\n');
 
     return NextResponse.json({
       displayName,

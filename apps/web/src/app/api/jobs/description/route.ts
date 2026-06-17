@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/lib/server-auth';
+import { isAllowedJobUrl } from '@/lib/safe-url';
 
 const cache = new Map<string, { text: string; expiresAt: number }>();
 const TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -6,6 +8,13 @@ const TTL_MS = 60 * 60 * 1000; // 1 hour
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get('url');
   if (!url) return NextResponse.json({ text: '' }, { status: 400 });
+
+  const session = await requireSession(req);
+  if (session instanceof NextResponse) return session;
+
+  if (!isAllowedJobUrl(url)) {
+    return NextResponse.json({ error: 'URL not allowed' }, { status: 400 });
+  }
 
   const cached = cache.get(url);
   if (cached && cached.expiresAt > Date.now()) {

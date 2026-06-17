@@ -1,11 +1,12 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/lib/server-auth';
 
 // Logo source priority:
 // 1. Logo.dev  — high-quality logos, free public token
 // 2. Google S2 favicons — always works, lower quality fallback
-const PK = process.env['LOGO_DEV_PUBLISHABLE_KEY'] ?? 'pk_public';
+const PK = process.env['LOGO_DEV_PUBLISHABLE_KEY'];
 const LOGO_SOURCES = (domain: string) => [
-  `https://img.logo.dev/${domain}?token=${PK}&size=128`,
+  ...(PK ? [`https://img.logo.dev/${domain}?token=${PK}&size=128`] : []),
   `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
 ];
 
@@ -51,6 +52,9 @@ function guessCompanyDomain(company: string): string {
 }
 
 export async function GET(req: NextRequest) {
+  const session = await requireSession(req);
+  if (session instanceof NextResponse) return session;
+
   // Support both ?domain= and ?company= parameters
   let domain = req.nextUrl.searchParams.get('domain');
   const company = req.nextUrl.searchParams.get('company');

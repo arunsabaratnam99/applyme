@@ -75,6 +75,7 @@ export function ResumeUpload({ onParsed, className }: ResumeUploadProps) {
 
       const res = await fetch('/api/resumes/parse', {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       });
 

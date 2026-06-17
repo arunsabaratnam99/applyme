@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireSession } from '@/lib/server-auth';
 
 export async function POST(req: NextRequest) {
+  const session = await requireSession(req);
+  if (session instanceof NextResponse) return session;
+
   try {
     const { text } = (await req.json()) as { text?: string };
     if (!text?.trim()) {

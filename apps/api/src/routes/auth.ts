@@ -1,19 +1,72 @@
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types.js';
 import {
   signSession,
   clearSessionCookie,
 } from '../middleware/auth.js';
+import { resolveOrigin } from '../utils/origin.js';
 import { schema } from '@applyme/db';
 
 const auth = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+const OAUTH_STATE_COOKIE = 'oauth_state';
+
+function oauthStateCookieFlags(env: Env): string {
+  const isProd = !env.APP_BASE_URL.startsWith('http://localhost');
+  return `HttpOnly; SameSite=Lax; Path=/auth; Max-Age=600${isProd ? '; Secure' : ''}`;
+}
+
+function setOAuthStateCookie(nonce: string, env: Env): string {
+  return `${OAUTH_STATE_COOKIE}=${nonce}; ${oauthStateCookieFlags(env)}`;
+}
+
+function clearOAuthStateCookie(env: Env): string {
+  return `${OAUTH_STATE_COOKIE}=; ${oauthStateCookieFlags(env)}; Max-Age=0`;
+}
+
+function readOAuthStateCookie(request: Request): string | null {
+  const cookie = request.headers.get('Cookie') ?? '';
+  const match = cookie.match(new RegExp(`(?:^|;\\s*)${OAUTH_STATE_COOKIE}=([^;]+)`));
+  return match?.[1] ?? null;
+}
+
+function parseOAuthState(state: string | undefined): { nonce?: string; origin?: string } | null {
+  try {
+    return JSON.parse(atob(state ?? '')) as { nonce?: string; origin?: string };
+  } catch {
+    return null;
+  }
+}
+
+function verifyOAuthState(request: Request, state: string | undefined, env: Env): string | null {
+  const parsed = parseOAuthState(state);
+  const storedNonce = readOAuthStateCookie(request);
+  if (!parsed?.nonce || !storedNonce || parsed.nonce !== storedNonce) {
+    return null;
+  }
+  return resolveOrigin(parsed.origin, env);
+}
+
+function sessionCompleteUrl(origin: string, token: string): string {
+  return `${origin}/auth/complete#token=${encodeURIComponent(token)}`;
+}
+
+function redirectWithCookie(
+  c: { header: (name: string, value: string) => void; redirect: (url: string, status?: 302) => Response },
+  url: string,
+  cookie: string,
+): Response {
+  c.header('Set-Cookie', cookie);
+  return c.redirect(url, 302);
+}
+
 // ─── Google OAuth ─────────────────────────────────────────────────────────────
 
 auth.get('/google', (c) => {
-  const origin = c.req.query('origin') ?? c.env.APP_BASE_URL;
-  const state = btoa(JSON.stringify({ nonce: crypto.randomUUID(), origin }));
+  const origin = resolveOrigin(c.req.query('origin'), c.env);
+  const nonce = crypto.randomUUID();
+  const state = btoa(JSON.stringify({ nonce, origin }));
   const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
   const params = new URLSearchParams({
     client_id: c.env.OAUTH_GOOGLE_CLIENT_ID,
@@ -24,23 +77,25 @@ auth.get('/google', (c) => {
     access_type: 'offline',
     prompt: 'consent',
   });
-  return c.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+  return redirectWithCookie(
+    c,
+    `https://accounts.google.com/o/oauth2/v2/auth?${params}`,
+    setOAuthStateCookie(nonce, c.env),
+  );
 });
 
 auth.get('/google/callback', async (c) => {
-  // Parse origin from state first so we can redirect errors
   const { state, code } = c.req.query();
-  let origin = c.env.APP_BASE_URL;
+  const origin = verifyOAuthState(c.req.raw, state, c.env) ?? c.env.APP_BASE_URL;
+  const clearCookie = clearOAuthStateCookie(c.env);
+
+  const redirectError = (msg: string) =>
+    redirectWithCookie(c, `${origin}/api/auth/callback?error=${encodeURIComponent(msg)}`, clearCookie);
+
   try {
-    const parsed = JSON.parse(atob(state ?? ''));
-    if (parsed.origin?.endsWith('.netlify.app') || parsed.origin?.startsWith('http://localhost')) {
-      origin = parsed.origin;
+    if (!verifyOAuthState(c.req.raw, state, c.env)) {
+      return redirectError('Invalid OAuth state');
     }
-  } catch { /* use default */ }
-
-  const redirectError = (msg: string) => c.redirect(`${origin}/api/auth/callback?error=${encodeURIComponent(msg)}`, 302);
-
-  try {
     if (!code) return redirectError('Missing code');
 
     const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
@@ -84,8 +139,7 @@ auth.get('/google/callback', async (c) => {
       c.env.JWT_SECRET,
     );
 
-    const callbackUrl = `${origin}/api/auth/callback?token=${encodeURIComponent(token)}`;
-    return c.redirect(callbackUrl, 302);
+    return redirectWithCookie(c, sessionCompleteUrl(origin, token), clearCookie);
   } catch (err) {
     console.error('[google/callback] error:', err);
     return redirectError(err instanceof Error ? err.message : 'Unknown error');
@@ -95,8 +149,9 @@ auth.get('/google/callback', async (c) => {
 // ─── GitHub OAuth ─────────────────────────────────────────────────────────────
 
 auth.get('/github', (c) => {
-  const origin = c.req.query('origin') ?? c.env.APP_BASE_URL;
-  const state = btoa(JSON.stringify({ nonce: crypto.randomUUID(), origin }));
+  const origin = resolveOrigin(c.req.query('origin'), c.env);
+  const nonce = crypto.randomUUID();
+  const state = btoa(JSON.stringify({ nonce, origin }));
   const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
   const params = new URLSearchParams({
     client_id: c.env.OAUTH_GITHUB_CLIENT_ID,
@@ -104,12 +159,32 @@ auth.get('/github', (c) => {
     scope: 'read:user user:email',
     state,
   });
-  return c.redirect(`https://github.com/login/oauth/authorize?${params}`);
+  return redirectWithCookie(
+    c,
+    `https://github.com/login/oauth/authorize?${params}`,
+    setOAuthStateCookie(nonce, c.env),
+  );
 });
 
 auth.get('/github/callback', async (c) => {
-  const { code } = c.req.query();
-  if (!code) return c.json({ error: 'Missing code' }, 400);
+  const { code, state } = c.req.query();
+  const clearCookie = clearOAuthStateCookie(c.env);
+  const origin = verifyOAuthState(c.req.raw, state, c.env) ?? c.env.APP_BASE_URL;
+
+  if (!verifyOAuthState(c.req.raw, state, c.env)) {
+    return redirectWithCookie(
+      c,
+      `${origin}/api/auth/callback?error=${encodeURIComponent('Invalid OAuth state')}`,
+      clearCookie,
+    );
+  }
+  if (!code) {
+    return redirectWithCookie(
+      c,
+      `${origin}/api/auth/callback?error=${encodeURIComponent('Missing code')}`,
+      clearCookie,
+    );
+  }
 
   const apiBase = c.env.API_BASE_URL ?? 'http://localhost:8787';
   const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
@@ -127,7 +202,13 @@ auth.get('/github/callback', async (c) => {
   });
 
   const tokens = await tokenRes.json() as { access_token: string };
-  if (!tokens.access_token) return c.json({ error: 'Token exchange failed' }, 400);
+  if (!tokens.access_token) {
+    return redirectWithCookie(
+      c,
+      `${origin}/api/auth/callback?error=${encodeURIComponent('Token exchange failed')}`,
+      clearCookie,
+    );
+  }
 
   const [profileRes, emailsRes] = await Promise.all([
     fetch('https://api.github.com/user', {
@@ -141,7 +222,13 @@ auth.get('/github/callback', async (c) => {
   const ghProfile = await profileRes.json() as { id: number; name: string; avatar_url: string };
   const emails = await emailsRes.json() as Array<{ email: string; primary: boolean; verified: boolean }>;
   const primary = emails.find((e) => e.primary && e.verified);
-  if (!primary) return c.json({ error: 'No verified email' }, 400);
+  if (!primary) {
+    return redirectWithCookie(
+      c,
+      `${origin}/api/auth/callback?error=${encodeURIComponent('No verified email')}`,
+      clearCookie,
+    );
+  }
 
   const db = c.get('db');
   const user = await upsertUser(db, {
@@ -158,18 +245,7 @@ auth.get('/github/callback', async (c) => {
     c.env.JWT_SECRET,
   );
 
-  // Parse origin from state
-  const { state } = c.req.query();
-  let origin = c.env.APP_BASE_URL;
-  try {
-    const parsed = JSON.parse(atob(state ?? ''));
-    if (parsed.origin?.endsWith('.netlify.app') || parsed.origin?.startsWith('http://localhost')) {
-      origin = parsed.origin;
-    }
-  } catch { /* use default */ }
-
-  const callbackUrl = `${origin}/api/auth/callback?token=${encodeURIComponent(token)}`;
-  return c.redirect(callbackUrl, 302);
+  return redirectWithCookie(c, sessionCompleteUrl(origin, token), clearCookie);
 });
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
@@ -191,14 +267,15 @@ async function upsertUser(
     accessToken: string;
   },
 ) {
-  // Check for existing identity
   const existing = await db.query.userOauthIdentities.findFirst({
-    where: eq(schema.userOauthIdentities.providerId, params.providerId),
+    where: and(
+      eq(schema.userOauthIdentities.provider, params.provider),
+      eq(schema.userOauthIdentities.providerId, params.providerId),
+    ),
     with: { user: true },
   });
 
   if (existing?.user) {
-    // Update access token
     await db
       .update(schema.userOauthIdentities)
       .set({ accessToken: params.accessToken, updatedAt: new Date() })
@@ -206,7 +283,6 @@ async function upsertUser(
     return existing.user;
   }
 
-  // Check if user with email exists
   let user = await db.query.users.findFirst({
     where: eq(schema.users.email, params.email),
   });
@@ -223,13 +299,10 @@ async function upsertUser(
     if (!newUser) throw new Error('Failed to create user');
     user = newUser;
 
-    // Create default profile
     await db.insert(schema.userProfiles).values({ userId: user.id }).onConflictDoNothing();
-    // Create default watchlist
     await db.insert(schema.watchlists).values({ userId: user.id, label: 'My Watchlist' });
   }
 
-  // Link identity
   await db.insert(schema.userOauthIdentities).values({
     userId: user.id,
     provider: params.provider,

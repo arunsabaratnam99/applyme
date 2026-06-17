@@ -454,7 +454,7 @@ function CompanySearch({
     try {
       const res = await fetch(
         `/api/companies/search?q=${encodeURIComponent(q)}`,
-        { signal: controller.signal },
+        { credentials: 'include', signal: controller.signal },
       );
       if (!res.ok) throw new Error();
       const data = (await res.json()) as ClearbitCompany[];

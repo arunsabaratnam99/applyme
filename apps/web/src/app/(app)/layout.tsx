@@ -30,8 +30,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         if (err instanceof ApiError && err.status === 401) {
           router.replace('/login');
         } else {
-          // Non-auth error — let them through
-          setReady(true);
+          router.replace('/login?error=session');
         }
       });
   }, [pathname, router]);
