@@ -5,13 +5,23 @@ import type { NormalizedJob } from './ashby.js';
 
 const BRANCH_FALLBACKS = ['dev', 'main', 'master'];
 
-// Only 2026/active repos — stale historical repos are excluded to keep job count manageable
-const GITHUB_REPOS = [
-  { owner: 'SimplifyJobs', repo: 'Summer2026-Internships', isInternship: true },
-  { owner: 'SimplifyJobs', repo: 'New-Grad-Positions', isInternship: false },
-  { owner: 'Ouckah', repo: 'Summer2026-Internships', isInternship: true },
-  { owner: 'cvrve', repo: 'New-Grad-2026', isInternship: false },
-  { owner: 'vanshb03', repo: 'Summer2026-Internships', isInternship: true },
+export interface GithubRepoConfig {
+  owner: string;
+  repo: string;
+  isInternship: boolean;
+}
+
+// Built-in / default repos. Stale historical repos are excluded to keep job
+// count manageable. Users can extend this list via the `internship_sources`
+// table (see fetchGithubRepoJobs signature below).
+export const DEFAULT_GITHUB_REPOS: GithubRepoConfig[] = [
+  { owner: 'SimplifyJobs', repo: 'Summer2026-Internships',         isInternship: true },
+  { owner: 'vanshb03',     repo: 'Summer2027-Internships',         isInternship: true },
+  { owner: 'speedyapply',  repo: '2026-SWE-College-Jobs',          isInternship: true },
+  { owner: 'speedyapply',  repo: '2026-AI-College-Jobs',           isInternship: true },
+  { owner: 'jenndryden',   repo: 'Canadian-Tech-Internships',      isInternship: true },
+  { owner: 'skillsire',    repo: 'Internship-and-Co-op-Jobs',      isInternship: true },
+  { owner: 'negarprh',     repo: 'Canadian-Tech-Internships-2026', isInternship: true },
 ];
 
 const MAX_JOB_AGE_DAYS = 60;
@@ -29,18 +39,33 @@ interface GithubListing {
   category?: string;
 }
 
-export async function fetchGithubRepoJobs(): Promise<NormalizedJob[]> {
+export async function fetchGithubRepoJobs(
+  repos: GithubRepoConfig[] = DEFAULT_GITHUB_REPOS,
+): Promise<NormalizedJob[]> {
   const results: NormalizedJob[] = [];
   const seen = new Set<string>();
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - MAX_JOB_AGE_DAYS);
 
-  for (const { owner, repo, isInternship } of GITHUB_REPOS) {
+  // Dedup the (owner, repo) pairs while preserving order so duplicate user
+  // entries don't cost us extra HTTP round-trips.
+  const uniqueRepos: GithubRepoConfig[] = [];
+  const seenRepoKeys = new Set<string>();
+  for (const r of repos) {
+    const key = `${r.owner.toLowerCase()}/${r.repo.toLowerCase()}`;
+    if (seenRepoKeys.has(key)) continue;
+    seenRepoKeys.add(key);
+    uniqueRepos.push(r);
+  }
+
+  for (const { owner, repo, isInternship } of uniqueRepos) {
     if (results.length >= MAX_JOBS_PER_TICK) break;
+
+    const sourceRepo = `${owner}/${repo}`;
 
     const listings = await fetchListingsJson(owner, repo);
     if (listings) {
-      const jobs = parseListingsJson(listings, repo, isInternship, seen, cutoff);
+      const jobs = parseListingsJson(listings, repo, sourceRepo, isInternship, seen, cutoff);
       console.log(`[github] ${owner}/${repo}: ${jobs.length} jobs (listings.json)`);
       results.push(...jobs);
       continue;
@@ -49,7 +74,7 @@ export async function fetchGithubRepoJobs(): Promise<NormalizedJob[]> {
     const readme = await fetchReadme(owner, repo);
     if (!readme) continue;
 
-    const jobs = parseHtmlTable(readme, repo, isInternship, seen, cutoff);
+    const jobs = parseHtmlTable(readme, repo, sourceRepo, isInternship, seen, cutoff);
     console.log(`[github] ${owner}/${repo}: ${jobs.length} jobs (README.md)`);
     results.push(...jobs);
   }
@@ -92,6 +117,7 @@ async function fetchReadme(owner: string, repo: string): Promise<string | null> 
 function parseListingsJson(
   listings: GithubListing[],
   repoName: string,
+  sourceRepo: string,
   isInternship: boolean,
   seen: Set<string>,
   cutoff?: Date,
@@ -117,6 +143,7 @@ function parseListingsJson(
     results.push(
       buildNormalizedJob({
         repoName,
+        sourceRepo,
         isInternship,
         cleanCompany,
         cleanTitle,
@@ -135,6 +162,7 @@ function parseListingsJson(
 function parseHtmlTable(
   content: string,
   repoName: string,
+  sourceRepo: string,
   isInternship: boolean,
   seen: Set<string>,
   cutoff?: Date,
@@ -179,6 +207,7 @@ function parseHtmlTable(
     results.push(
       buildNormalizedJob({
         repoName,
+        sourceRepo,
         isInternship,
         cleanCompany,
         cleanTitle,
@@ -194,6 +223,7 @@ function parseHtmlTable(
 
 function buildNormalizedJob(params: {
   repoName: string;
+  sourceRepo: string;
   isInternship: boolean;
   cleanCompany: string;
   cleanTitle: string;
@@ -203,7 +233,7 @@ function buildNormalizedJob(params: {
   listingId?: string;
   categoryHint?: string;
 }): NormalizedJob {
-  const { repoName, isInternship, cleanCompany, cleanTitle, locationRaw, applyUrl, postedAt, listingId, categoryHint } =
+  const { repoName, sourceRepo, isInternship, cleanCompany, cleanTitle, locationRaw, applyUrl, postedAt, listingId, categoryHint } =
     params;
 
   const isRemote = locationRaw.toLowerCase().includes('remote');
@@ -259,6 +289,7 @@ function buildNormalizedJob(params: {
     }),
     salaryMin: null,
     salaryMax: null,
+    sourceRepo,
   };
 }
 

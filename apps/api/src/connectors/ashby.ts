@@ -22,6 +22,7 @@ export interface NormalizedJob {
   fingerprint: string;
   salaryMin?: number | null;
   salaryMax?: number | null;
+  sourceRepo?: string | null;
 }
 
 export async function fetchAshbyJobs(boardSlug: string, budget?: RequestBudget): Promise<NormalizedJob[]> {

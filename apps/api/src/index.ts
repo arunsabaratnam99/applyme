@@ -13,6 +13,10 @@ import { jobs } from './routes/jobs.js';
 import { applications } from './routes/applications.js';
 import { autofillProfiles } from './routes/autofill-profiles.js';
 import { watchlist } from './routes/watchlist.js';
+import { internshipSources } from './routes/internship-sources.js';
+import { savedJobs } from './routes/saved-jobs.js';
+import { insights } from './routes/insights.js';
+import { tablePreferences } from './routes/table-preferences.js';
 import { runCronTick } from './cron/tick.js';
 import { SEARCH_QUERIES, MAX_QUERIES } from './connectors/linkedin_scraper.js';
 import { eq, like } from 'drizzle-orm';
@@ -109,6 +113,10 @@ app.route('/api/jobs', jobs);
 app.route('/api/applications', applications);
 app.route('/api/autofill-profiles', autofillProfiles);
 app.route('/api/watchlist', watchlist);
+app.route('/api/internship-sources', internshipSources);
+app.route('/api/saved-jobs', savedJobs);
+app.route('/api/insights', insights);
+app.route('/api/table-preferences', tablePreferences);
 
 // ─── Admin: refresh status + manual trigger (auth-protected) ─────────────────
 

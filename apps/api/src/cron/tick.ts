@@ -5,7 +5,7 @@ import { fetchAshbyJobs } from '../connectors/ashby.js';
 import { fetchLeverJobs } from '../connectors/lever.js';
 import { fetchGreenhouseJobs } from '../connectors/greenhouse.js';
 import { fetchJobBankJobs } from '../connectors/jobbank.js';
-import { fetchGithubRepoJobs } from '../connectors/github.js';
+import { fetchGithubRepoJobs, DEFAULT_GITHUB_REPOS, type GithubRepoConfig } from '../connectors/github.js';
 import { fetchRemotiveJobs } from '../connectors/remotive.js';
 import { fetchWorkAtStartupJobs } from '../connectors/workatastartup.js';
 import { fetchLinkedInJobs } from '../connectors/linkedin_scraper.js';
@@ -34,6 +34,31 @@ export async function runCronTick(env: Env, cron?: string): Promise<void> {
   } catch (err) {
     console.error('[cron] tick error:', err);
     throw err;
+  }
+}
+
+// Collect distinct, enabled (owner, repo) pairs across all users so the cron
+// ingests every user-added internship repo in a single pass.
+async function fetchEnabledUserRepos(
+  db: ReturnType<typeof createDb>,
+): Promise<GithubRepoConfig[]> {
+  try {
+    const rows = await db.query.internshipSources.findMany({
+      where: eq(schema.internshipSources.enabled, true),
+      columns: { owner: true, repo: true, isInternship: true },
+    });
+    const seen = new Set<string>();
+    const out: GithubRepoConfig[] = [];
+    for (const r of rows) {
+      const key = `${r.owner.toLowerCase()}/${r.repo.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ owner: r.owner, repo: r.repo, isInternship: r.isInternship });
+    }
+    return out;
+  } catch (err) {
+    console.error('[cron] failed to load user internship_sources:', err);
+    return [];
   }
 }
 
@@ -75,9 +100,11 @@ async function ingestJobs(db: ReturnType<typeof createDb>, env: Env, isFast = fa
         case 'jobbank_ca':
           rawJobs = await fetchJobBankJobs(budget);
           break;
-        case 'github_repo':
-          rawJobs = await fetchGithubRepoJobs();
+        case 'github_repo': {
+          const userRepos = await fetchEnabledUserRepos(db);
+          rawJobs = await fetchGithubRepoJobs([...DEFAULT_GITHUB_REPOS, ...userRepos]);
           break;
+        }
         case 'remotive':
           rawJobs = await fetchRemotiveJobs(budget);
           break;
@@ -138,6 +165,7 @@ async function ingestJobs(db: ReturnType<typeof createDb>, env: Env, isFast = fa
       applyType: job.applyType,
       applyEmail: job.applyEmail,
       sourceType: source.sourceType,
+      sourceRepo: job.sourceRepo ?? null,
       jobCategory: job.jobCategory,
       employmentType: job.employmentType,
       salaryMin: job.salaryMin != null ? String(job.salaryMin) : null,

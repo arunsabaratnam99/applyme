@@ -43,6 +43,7 @@ export const jobs = pgTable(
     applyType: text('apply_type').notNull().default('url'),
     applyEmail: text('apply_email'),
     sourceType: text('source_type').notNull(),
+    sourceRepo: text('source_repo'),
     jobCategory: text('job_category').notNull(),
     employmentType: text('employment_type').notNull().default('full_time'),
     salaryMin: text('salary_min'),
@@ -56,6 +57,7 @@ export const jobs = pgTable(
     postedAtIdx: index('jobs_posted_at_idx').on(table.postedAt),
     categoryIdx: index('jobs_category_idx').on(table.jobCategory),
     employmentTypeIdx: index('jobs_employment_type_idx').on(table.employmentType),
+    sourceRepoIdx: index('jobs_source_repo_idx').on(table.sourceRepo),
   }),
 );
 

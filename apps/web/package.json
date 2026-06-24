@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@applyme/shared": "workspace:*",
+    "@nivo/core": "^0.99.0",
+    "@nivo/sankey": "^0.99.0",
     "@radix-ui/react-avatar": "^1.0.4",
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-dropdown-menu": "^2.0.6",
@@ -27,13 +29,13 @@
     "clsx": "^2.1.0",
     "framer-motion": "^11.0.8",
     "geist": "^1.3.0",
+    "jose": "^5.2.3",
     "lucide-react": "^0.358.0",
     "next": "14.1.4",
     "next-themes": "^0.3.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "swr": "^2.2.5",
-    "jose": "^5.2.3",
     "tailwind-merge": "^2.2.1",
     "unpdf": "^1.4.0",
     "zod": "^3.22.4"

@@ -141,10 +141,30 @@ export const UpdateApplicationStatusSchema = z.object({
 
 export const ApplicationsQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional().default(1),
-  limit: z.coerce.number().int().positive().max(50).optional().default(20),
+  limit: z.coerce.number().int().positive().max(500).optional().default(20),
   status: ApplicationStatusSchema.optional(),
   applyMethod: ApplyMethodSchema.optional(),
 });
+
+// ─── Table preferences ───────────────────────────────────────────────────────
+
+export const TablePreferencesSchema = z.object({
+  columns: z.array(
+    z.object({
+      id: z.string().min(1).max(80),
+      visible: z.boolean(),
+      width: z.number().int().positive().max(2000).optional(),
+    }),
+  ),
+  sort: z
+    .object({
+      columnId: z.string().min(1).max(80),
+      dir: z.enum(['asc', 'desc']),
+    })
+    .nullable(),
+});
+
+export type TablePreferences = z.infer<typeof TablePreferencesSchema>;
 
 // ─── Watchlist ────────────────────────────────────────────────────────────────
 

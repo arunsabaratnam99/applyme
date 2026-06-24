@@ -1,14 +1,20 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 const COOKIE_NAME = 'am_session';
 
 export default function AuthCompletePage() {
   const router = useRouter();
+  const didRun = useRef(false);
 
   useEffect(() => {
+    // Guard against React Strict Mode double-invocation: the first run clears
+    // the hash via replaceState, so the second run would see an empty hash.
+    if (didRun.current) return;
+    didRun.current = true;
+
     const hash = window.location.hash.startsWith('#')
       ? window.location.hash.slice(1)
       : window.location.hash;
