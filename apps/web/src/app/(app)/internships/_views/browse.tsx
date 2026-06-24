@@ -26,6 +26,7 @@ import { toast } from '@/hooks/use-toast';
 import {
   CompanyLogo,
   ApplyButton,
+  QuickApplyButton,
   JobDetailPanel,
   type Job,
   type JobsResponse,
@@ -99,7 +100,7 @@ const COLUMNS: ColumnDef[] = [
 
 const COLUMN_BY_ID = new Map(COLUMNS.map((c) => [c.id, c]));
 
-const DEFAULT_VISIBLE = new Set(['logo', 'company', 'title', 'location', 'postedAt', 'repo', 'status', 'actions']);
+const DEFAULT_VISIBLE = new Set(['logo', 'company', 'title', 'location', 'postedAt', 'repo', 'status', 'country', 'actions']);
 
 function defaultPrefs(): TablePrefs {
   return {
@@ -115,7 +116,7 @@ function reconcilePrefs(saved: TablePrefs | null): TablePrefs {
   for (const c of saved.columns ?? []) {
     if (COLUMN_BY_ID.has(c.id) && !seen.has(c.id)) {
       seen.add(c.id);
-      merged.push({ id: c.id, visible: c.visible, width: c.width });
+      merged.push({ id: c.id, visible: c.visible, ...(c.width !== undefined ? { width: c.width } : {}) });
     }
   }
   for (const c of COLUMNS) {
@@ -572,19 +573,33 @@ function Cell({
     case 'workplaceType':
       return <span className="text-muted-foreground">{job.workplaceType ? labelWorkplace(job.workplaceType) : '—'}</span>;
     case 'country':
-      return <span className="text-muted-foreground uppercase text-xs">{job.country || '—'}</span>;
+      return (
+        <span className="flex items-center gap-1.5">
+          {job.country ? (
+            <><span className="text-base leading-none">{countryToFlag(job.country)}</span><span className="text-muted-foreground uppercase text-xs">{job.country}</span></>
+          ) : <span className="text-muted-foreground">—</span>}
+        </span>
+      );
     case 'salary':
       return <span className="text-muted-foreground">{formatSalary(job.salaryMin, job.salaryMax)}</span>;
     case 'status': {
       if (!application) {
         return (
-          <ApplyButton
-            job={job}
-            label="Apply"
-            iconSize="h-3 w-3"
-            resolvedUrls={resolvedUrls}
-            className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent transition-colors"
-          />
+          <div className="inline-flex items-center gap-1.5">
+            <ApplyButton
+              job={job}
+              label="Apply"
+              iconSize="h-3 w-3"
+              resolvedUrls={resolvedUrls}
+              className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent transition-colors"
+            />
+            <QuickApplyButton
+              job={job}
+              iconSize="h-3 w-3"
+              resolvedUrls={resolvedUrls}
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/60 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-700/50 dark:hover:bg-amber-950/50"
+            />
+          </div>
         );
       }
       return (
@@ -735,6 +750,15 @@ function labelFor(s: ApplicationStatus): string {
 function labelWorkplace(t: string): string {
   const map: Record<string, string> = { remote: 'Remote', hybrid: 'Hybrid', onsite: 'On-site' };
   return map[t] ?? t;
+}
+
+function countryToFlag(code: string): string {
+  if (!code || code.length !== 2) return '';
+  const base = 0x1F1E6;
+  return (
+    String.fromCodePoint(base + code.toUpperCase().charCodeAt(0) - 65) +
+    String.fromCodePoint(base + code.toUpperCase().charCodeAt(1) - 65)
+  );
 }
 
 function formatSalary(min: string | null, max: string | null): string {

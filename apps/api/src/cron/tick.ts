@@ -1,4 +1,4 @@
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 import { schema, createDb } from '@applyme/db';
 import { getPeersForCompany, isTier1Company } from '@applyme/shared';
 import { fetchAshbyJobs } from '../connectors/ashby.js';
@@ -175,7 +175,15 @@ async function ingestJobs(db: ReturnType<typeof createDb>, env: Env, isFast = fa
     if (rows.length > 0) {
       for (let i = 0; i < rows.length; i += CHUNK) {
         try {
-          await db.insert(schema.jobs).values(rows.slice(i, i + CHUNK)).onConflictDoNothing();
+          const chunk = rows.slice(i, i + CHUNK);
+          if (source.sourceType === 'github_repo') {
+            await db.insert(schema.jobs).values(chunk).onConflictDoUpdate({
+              target: schema.jobs.canonicalUrlHash,
+              set: { sourceRepo: sql`EXCLUDED.source_repo` },
+            });
+          } else {
+            await db.insert(schema.jobs).values(chunk).onConflictDoNothing();
+          }
         } catch {
           // Silently skip chunk on error
         }

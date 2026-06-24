@@ -112,7 +112,6 @@ export const autofillQueue = pgTable(
       .notNull()
       .references(() => jobs.id, { onDelete: 'cascade' }),
     draftId: uuid('draft_id')
-      .notNull()
       .references(() => applicationDrafts.id, { onDelete: 'cascade' }),
     applyUrl: text('apply_url').notNull(),
     atsType: text('ats_type').notNull().default('unknown'),
